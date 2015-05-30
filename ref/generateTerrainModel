@@ -1,0 +1,34 @@
+import sys
+from panda3d.core import GeoMipTerrain
+from pandac.PandaModules import TextureStage, Texture
+
+try:
+
+	zScale = sys.argv[1]
+
+	terrain = GeoMipTerrain("worldTerrain")
+
+	terrain.setHeightfield("heightmap.jpg")
+	terrain.setColorMap("colourmap.jpg")
+	# terrain.setBlockSize(512)
+	terrain.setBruteforce(True)
+
+	root = terrain.getRoot()
+	root.setSz(zScale) 
+
+	terrain.generate()
+	root.writeBamFile('gworld.bam')
+
+	heightfieldFile = sys.argv[2]
+	textures = []
+
+	for i in range(3, len(sys.argv)):
+
+		texture = loader.loadTexture(sys.argv[i])
+		texture.setMinfilter(Texture.FTLinearMipmapLinear
+		
+		textures.append(texture)
+		
+except:
+
+	print "Error generating .egg"
