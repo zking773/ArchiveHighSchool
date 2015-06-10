@@ -8,9 +8,25 @@ from panda3d.core import Point3, BitMask32, Vec3
 from panda3d.core import CollisionTraverser,CollisionNode, CollisionHandlerFloor
 from panda3d.core import CollisionHandlerEvent
 from panda3d.core import CollisionSphere, CollisionRay
-from panda3d.core import GeoMipTerrain
+from panda3d.core import GeoMipTerrain, loadPrcFileData
 from panda3d.physics import *
 from pandac.PandaModules import WindowProperties
+
+########## Gameplay variables #########
+
+#Game modes
+
+MAIN_MENU = 0
+NORMAL = 1
+
+GAME_MODE = NORMAL
+
+#Navigation modes
+
+TERRAIN = 0
+SPACE = 1
+
+NAVIGATION_MODE = TERRAIN
 
 class PlayerVessel(object):
 
@@ -40,6 +56,13 @@ class PlayerVessel(object):
 
 class Camera(object):
 
+    ROT_RATE = (.5, .25)
+    ELEVATION = 5
+    AVATAR_DIST = 20
+
+    MIN_PITCH_ROT = -20
+    MAX_PITCH_ROT = 20
+
     def __init__(self):
 
         pass
@@ -49,6 +72,10 @@ class MyApp(ShowBase):
     def __init__(self):
 
         ShowBase.__init__(self)
+
+        wp = WindowProperties()
+        wp.setSize(1024, 860)
+        self.win.requestProperties(wp)
 
         ########## Terrain #########
 
@@ -137,10 +164,6 @@ class MyApp(ShowBase):
 
         self.disableMouse()
 
-        self.cam_away = 20
-        self.cam_elevation = 5
-        self.rot_rate = .5
-
         self.cam.setHpr(0, 0, 0)
 
         ######### Events #########
@@ -175,15 +198,9 @@ class MyApp(ShowBase):
         self.last_mouse_x = self.win.getPointer(0).getX()
         self.last_mouse_y = self.win.getPointer(0).getY()
 
-        self.navigation_mode = "plane"
-
-        print self.environ.getName()
-
     def b(self, hey):
 
         self.avatarLanded = True
-
-        print "it"
 
     def setKey(self, key, value):
 
@@ -206,120 +223,109 @@ class MyApp(ShowBase):
 
         dt = globalClock.getDt()
 
-        #Handle keyboard input
+        if GAME_MODE == NORMAL:
 
-        if self.keys["w"]: self.avatarNP.setZ(self.avatarNP, 5 * dt)
+            #Handle keyboard input
 
-        if self.keys["s"]: self.avatarNP.setZ(self.avatarNP, -5 * dt)
+            if self.keys["w"]: self.avatarNP.setZ(self.avatarNP, 5 * dt)
 
-        if self.keys["a"]: self.avatarNP.setX(self.avatarNP, -5 * dt)
+            if self.keys["s"]: self.avatarNP.setZ(self.avatarNP, -5 * dt)
 
-        if self.keys["d"]: self.avatarNP.setX(self.avatarNP, 5 * dt)
+            if self.keys["a"]: self.avatarNP.setX(self.avatarNP, -5 * dt)
 
-        if self.keys["space"]:
+            if self.keys["d"]: self.avatarNP.setX(self.avatarNP, 5 * dt)
 
-            if self.avatarLanded:
+            if self.keys["space"]:
 
-                self.avatarLanded = False
+                if self.avatarLanded:
 
-                self.jumpThrusting = True
-                self.jumpThrustCounter = 0
+                    self.avatarLanded = False
 
-                thrustFN = ForceNode('world-forces')
+                    self.jumpThrusting = True
+                    self.jumpThrustCounter = 0
 
-                self.jumpThrustForce = LinearVectorForce(0, 0, 25)
-                self.jumpThrustForce.setMassDependent(False)
+                    thrustFN = ForceNode('world-forces')
 
-                thrustFN.addForce(self.jumpThrustForce)
+                    self.jumpThrustForce = LinearVectorForce(0, 0, 25)
+                    self.jumpThrustForce.setMassDependent(False)
 
-                self.avatarNP.node().getPhysical(0).addLinearForce(self.jumpThrustForce)
+                    thrustFN.addForce(self.jumpThrustForce)
 
-        if self.jumpThrusting:
+                    self.avatarNP.node().getPhysical(0).addLinearForce(self.jumpThrustForce)
 
-            if self.jumpThrustCounter < 20:
+            if self.jumpThrusting:
 
-                self.jumpThrustCounter += 1
+                if self.jumpThrustCounter < 20:
 
-            else:
+                    self.jumpThrustCounter += 1
 
-                self.avatarNP.node().getPhysical(0).removeLinearForce(self.jumpThrustForce)
+                else:
 
-                self.jumpThrusting = False
+                    self.avatarNP.node().getPhysical(0).removeLinearForce(self.jumpThrustForce)
 
-        #Mouse-based viewpoint rotation
+                    self.jumpThrusting = False
 
-        mouse_pos = self.win.getPointer(0)
+            #Mouse-based viewpoint rotation
 
-        current_mouse_x = mouse_pos.getX()
-        current_mouse_y = mouse_pos.getY()
+            mouse_pos = self.win.getPointer(0)
 
-        mouse_shift_x = current_mouse_x - self.last_mouse_x
-        mouse_shift_y = current_mouse_y - self.last_mouse_y
+            current_mouse_x = mouse_pos.getX()
+            current_mouse_y = mouse_pos.getY()
 
-        self.last_mouse_x = current_mouse_x
-        self.last_mouse_y = current_mouse_y
+            mouse_shift_x = current_mouse_x - self.last_mouse_x
+            mouse_shift_y = current_mouse_y - self.last_mouse_y
 
-        if current_mouse_x == 0 or current_mouse_x >= (self.win_center_x * 1.5):
+            self.last_mouse_x = current_mouse_x
+            self.last_mouse_y = current_mouse_y
 
-            base.win.movePointer(0, self.win_center_x, self.win_center_y)
-            self.last_mouse_x = self.win_center_x
+            if current_mouse_x < 5 or current_mouse_x >= (self.win_center_x * 1.5):
 
-        if current_mouse_y == 0 or current_mouse_y >= (self.win_center_y * 1.5):
+                base.win.movePointer(0, self.win_center_x, self.win_center_y)
+                self.last_mouse_x = self.win_center_x
 
-            base.win.movePointer(0, self.win_center_x, self.win_center_y)
-            self.last_mouse_y = self.win_center_y
+            if current_mouse_y < 5 or current_mouse_y >= (self.win_center_y * 1.5):
 
-        yaw_shift = -((mouse_shift_x) * self.rot_rate)
-        pitch_shift = -((mouse_shift_y) * self.rot_rate)
+                base.win.movePointer(0, self.win_center_x, self.win_center_y)
+                self.last_mouse_y = self.win_center_y
 
-        self.avatarYawRot += yaw_shift
-        self.avatarPitchRot += pitch_shift
+            yaw_shift = -((mouse_shift_x) * Camera.ROT_RATE[0])
+            pitch_shift = -((mouse_shift_y) * Camera.ROT_RATE[1])
 
-        self.avatarNP.setH(self.avatarYawRot)
+            self.avatarYawRot += yaw_shift
+            self.avatarPitchRot += pitch_shift
 
-        self.cam.setH(self.avatarYawRot)
-        self.cam.setP(self.avatarPitchRot)
+            if self.avatarPitchRot > Camera.MAX_PITCH_ROT:
 
-        if self.navigation_mode == "space":
+                self.avatarPitchRot = Camera.MAX_PITCH_ROT
 
-            xy_plane_cam_away = self.cam_away*cos(radians(self.avatarPitchRot))
-        
-            cam_z_adjust = self.cam_away*sin(radians(self.avatarPitchRot))
+            elif self.avatarPitchRot < Camera.MIN_PITCH_ROT:
 
-        else:
+                self.avatarPitchRot = Camera.MIN_PITCH_ROT
 
-            xy_plane_cam_away = self.cam_away
+            self.avatarNP.setH(self.avatarYawRot)
 
-            cam_z_adjust = self.cam_elevation
+            self.cam.setH(self.avatarYawRot)
+            self.cam.setP(self.avatarPitchRot)
 
-        cam_x_adjust = xy_plane_cam_away*sin(radians(self.avatarYawRot))  
-        cam_y_adjust = xy_plane_cam_away*cos(radians(self.avatarYawRot))
+            if NAVIGATION_MODE == TERRAIN:
 
-        self.cam.setPos(self.avatarNP.getX() + cam_x_adjust, self.avatarNP.getY() - cam_y_adjust, 
-                        self.avatarNP.getZ() + cam_z_adjust)
+                xy_plane_cam_dist = Camera.AVATAR_DIST
 
+                cam_z_adjust = Camera.ELEVATION
 
-        #self.cam.setP(self.x)
-        #self.x += .01
+            elif NAVIGATION_MODE == SPACE:
 
-        self.cTrav.traverse(render)
+                xy_plane_cam_dist = Camera.AVATAR_DIST*cos(radians(self.avatarPitchRot))
+            
+                cam_z_adjust = Camera.AVATAR_DIST*sin(radians(self.avatarPitchRot))
 
-        #entries = []
+            cam_x_adjust = xy_plane_cam_dist*sin(radians(self.avatarYawRot))  
+            cam_y_adjust = xy_plane_cam_dist*cos(radians(self.avatarYawRot))
 
-        #for i in range(self.pandaGroundCollisionHandler.getNumEntries()):
+            self.cam.setPos(self.avatarNP.getX() + cam_x_adjust, self.avatarNP.getY() - cam_y_adjust, 
+                            self.avatarNP.getZ() + cam_z_adjust)
 
-        #    entry = self.pandaGroundCollisionHandler.getEntry(i)
-        #    entries.append(entry)
-
-        #for entry in entries:
-
-        #    print entry.getIntoNode().getName()
-
-        #    if entry.getIntoNode().getName() == "terrain":
-
-        #        print "shiet"
-
-        #        self.pandaActor.setZ(entry.getSurfacePoint(render).getZ())
+            self.cTrav.traverse(render)
 
         return Task.cont
  

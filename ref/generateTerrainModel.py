@@ -26,14 +26,14 @@ if True:
 
 	
 
-	textures1 = ["default_c.png", "maps/default_d.png", "maps/default_l.png", 
-				"textures/bigRockFace.png", "textures/hardDirt.png", "textures/grayRock.png", "textures/shortGrass.png"]
+	#textures1 = ["default_c.png", "maps/default_d.png", "maps/default_l.png", 
+	#			"textures/bigRockFace.png", "textures/hardDirt.png", "textures/grayRock.png", "textures/shortGrass.png"]
 
-	textures = []
+	textures = ["textures/hardDirt.png"]
 
 	#for i in range(heightfieldIndex + 1, len(sys.argv)-1):
 	i = 0
-	for texture in textures1:
+	for texture in textures:
 
 		#texture = loader.loadTexture(sys.argv[i])
 
@@ -42,7 +42,7 @@ if True:
 		texture.setMinfilter(Texture.FTLinearMipmapLinear)
 
 
-		terrain.getRoot().setTexture(TextureStage('tex_' + str(i)), texture)
+		terrain.getRoot().setTexture(TextureStage('tex' + str(i)), texture)
 
 		i+=1
 
