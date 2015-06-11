@@ -81,7 +81,7 @@ class MyApp(ShowBase):
 
         self.environ = loader.loadModel("models/environment")
         self.environ.setName("terrain")
-        self.environ.setScale(.25, .25, .25)
+        #self.environ.setScale(.25, .25, .25)
         self.environ.reparentTo(render)
         self.environ.setCollideMask(BitMask32.bit(0))
 
@@ -91,14 +91,13 @@ class MyApp(ShowBase):
                                 {"walk": "models/panda-walk"})
         self.pandaActor.setScale(.5, .5, .5)
         self.pandaActor.setHpr(180, 0, 0)
-        self.pandaActor.setPos(0, 0, 1)
         self.pandaActor.setPythonTag("moving", False)
         self.pandaActor.setCollideMask(BitMask32.allOff())
         self.avatarYawRot = 0
         self.avatarPitchRot = 0
         self.avatarLanded = True
         self.jumpThrusting = False
-        self.jumpThrustCounter = 0
+        self.jumpThrustCounter = 10
 
         ######### Physics #########
 
@@ -107,7 +106,7 @@ class MyApp(ShowBase):
         self.avatarNP = base.render.attachNewNode(ActorNode("player"))
         self.avatarNP.setName("player")
         self.avatarNP.node().getPhysicsObject().setMass(50.)
-        self.avatarNP.setPos(0,0,0)
+        self.avatarNP.setPos(15,10,5)
 
         self.pandaActor.reparentTo(self.avatarNP)
 
@@ -124,23 +123,41 @@ class MyApp(ShowBase):
         ######### Collisions #########
 
         self.cTrav = CollisionTraverser()
-        self.cTrav.showCollisions(base.render)
+        #self.cTrav.showCollisions(base.render)
+
+        #Make player rigid body
+
+        self.pandaBodySphere = CollisionSphere(0, 0, 4, 3)
+
+        self.pandaBodySphereNode = CollisionNode('playerBodyRay')
+        self.pandaBodySphereNode.addSolid(self.pandaBodySphere)
+        self.pandaBodySphereNode.setFromCollideMask(BitMask32.bit(0))
+        self.pandaBodySphereNode.setIntoCollideMask(BitMask32.allOff())
+
+        self.pandaBodySphereNodepath = self.avatarNP.attachNewNode(self.pandaBodySphereNode)
+        self.pandaBodySphereNodepath.show()
+
+        self.pandaBodyCollisionHandler = PhysicsCollisionHandler()
+        self.pandaBodyCollisionHandler.addCollider(self.pandaBodySphereNodepath, self.avatarNP)
 
         #Keep player on ground
 
-        self.pandaGroundRay = CollisionSphere(0, 0, 1, 1)
+        self.pandaGroundSphere = CollisionSphere(0, 0, 1, 1)
 
-        self.pandaGroundRayNode = CollisionNode('playerGroundRay')
-        self.pandaGroundRayNode.addSolid(self.pandaGroundRay)
-        self.pandaGroundRayNode.setFromCollideMask(BitMask32.bit(0))
-        self.pandaGroundRayNode.setIntoCollideMask(BitMask32.allOff())
+        self.pandaGroundSphereNode = CollisionNode('playerGroundRay')
+        self.pandaGroundSphereNode.addSolid(self.pandaGroundSphere)
+        self.pandaGroundSphereNode.setFromCollideMask(BitMask32.bit(0))
+        self.pandaGroundSphereNode.setIntoCollideMask(BitMask32.allOff())
 
-        self.pandaGroundRayNodepath = self.avatarNP.attachNewNode(self.pandaGroundRayNode)
-        self.pandaGroundRayNodepath.show()
+        self.pandaGroundSphereNodepath = self.avatarNP.attachNewNode(self.pandaGroundSphereNode)
+        self.pandaGroundSphereNodepath.show()
 
-        #
+        self.pandaGroundCollisionHandler = PhysicsCollisionHandler()
+        self.pandaGroundCollisionHandler.addCollider(self.pandaGroundSphereNodepath, self.avatarNP)
 
-        self.pandaGroundRayJumping = CollisionSphere(0, 0, .5, 1)
+        #Notify when player lands
+
+        self.pandaGroundRayJumping = CollisionSphere(0, 0, 1, 1)
 
         self.pandaGroundRayNodeJumping = CollisionNode('playerGroundRayJumping')
         self.pandaGroundRayNodeJumping.addSolid(self.pandaGroundRayJumping)
@@ -150,15 +167,13 @@ class MyApp(ShowBase):
         self.pandaGroundRayNodepathJumping = self.avatarNP.attachNewNode(self.pandaGroundRayNodeJumping)
         self.pandaGroundRayNodepathJumping.show()
 
-        self.pandaGroundCollisionHandler = PhysicsCollisionHandler()
-        self.pandaGroundCollisionHandler.addCollider(self.pandaGroundRayNodepath, self.avatarNP)
-
         self.collisionNotifier = CollisionHandlerEvent()
         self.collisionNotifier.addInPattern('%fn-in')
-        self.collisionNotifier.addOutPattern('%fn-out-%in')
+        self.collisionNotifier.addOutPattern('%fn-out')
 
-        self.cTrav.addCollider(self.pandaGroundRayNodepath, self.pandaGroundCollisionHandler)
+        self.cTrav.addCollider(self.pandaGroundSphereNodepath, self.pandaGroundCollisionHandler)
         self.cTrav.addCollider(self.pandaGroundRayNodepathJumping, self.collisionNotifier)
+        self.cTrav.addCollider(self.pandaBodySphereNodepath, self.pandaBodyCollisionHandler)
 
         ######### Camera #########
 
@@ -202,6 +217,8 @@ class MyApp(ShowBase):
 
         self.avatarLanded = True
 
+        print "fucky"
+
     def setKey(self, key, value):
 
         self.keys[key] = value
@@ -215,7 +232,7 @@ class MyApp(ShowBase):
 
     def zoomCamera(self, direction):
 
-        self.cam_away += direction
+        Camera.AVATAR_DIST += direction
 
     def gameLoop(self, task):
 
@@ -227,35 +244,39 @@ class MyApp(ShowBase):
 
             #Handle keyboard input
 
-            if self.keys["w"]: self.avatarNP.setZ(self.avatarNP, 5 * dt)
+            if self.keys["w"]: self.avatarNP.setY(self.avatarNP, 5 * dt)
 
-            if self.keys["s"]: self.avatarNP.setZ(self.avatarNP, -5 * dt)
+            if self.keys["s"]: self.avatarNP.setY(self.avatarNP, -5 * dt)
 
             if self.keys["a"]: self.avatarNP.setX(self.avatarNP, -5 * dt)
 
             if self.keys["d"]: self.avatarNP.setX(self.avatarNP, 5 * dt)
 
-            if self.keys["space"]:
+            if self.avatarLanded:
 
-                if self.avatarLanded:
+                if self.keys["space"]:
 
-                    self.avatarLanded = False
+                    if self.jumpThrustCounter == 10 and not self.jumpThrusting:
 
-                    self.jumpThrusting = True
-                    self.jumpThrustCounter = 0
+                        self.avatarLanded = False
 
-                    thrustFN = ForceNode('world-forces')
+                        self.jumpThrusting = True
+                        self.jumpThrustCounter = 0
 
-                    self.jumpThrustForce = LinearVectorForce(0, 0, 25)
-                    self.jumpThrustForce.setMassDependent(False)
+                        thrustFN = ForceNode('world-forces')
 
-                    thrustFN.addForce(self.jumpThrustForce)
+                        self.jumpThrustForce = LinearVectorForce(0, 0, 50)
+                        self.jumpThrustForce.setMassDependent(False)
 
-                    self.avatarNP.node().getPhysical(0).addLinearForce(self.jumpThrustForce)
+                        thrustFN.addForce(self.jumpThrustForce)
+
+                        self.avatarNP.node().getPhysical(0).addLinearForce(self.jumpThrustForce)
 
             if self.jumpThrusting:
 
-                if self.jumpThrustCounter < 20:
+                self.avatarLanded = False
+
+                if self.jumpThrustCounter < 10:
 
                     self.jumpThrustCounter += 1
 
