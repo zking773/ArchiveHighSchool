@@ -1,4 +1,5 @@
 from math import pi, sin, cos, radians
+from sys import exit
  
 from direct.showbase.ShowBase import ShowBase
 from direct.task import Task
@@ -18,6 +19,7 @@ from pandac.PandaModules import WindowProperties
 
 MAIN_MENU = 0
 NORMAL = 1
+IN_GAME_MENU = 2
 
 GAME_MODE = NORMAL
 
@@ -63,9 +65,9 @@ class Camera(object):
     MIN_PITCH_ROT = -20
     MAX_PITCH_ROT = 20
 
-    def __init__(self):
+    def __init__(self, cameraObject):
 
-        pass
+        self.camObject = cameraObject
  
 class MyApp(ShowBase):
 
@@ -103,22 +105,19 @@ class MyApp(ShowBase):
 
         base.enableParticles()
 
-        self.avatarNP = base.render.attachNewNode(ActorNode("player"))
-        self.avatarNP.setName("player")
-        self.avatarNP.node().getPhysicsObject().setMass(50.)
-        self.avatarNP.setPos(15,10,5)
-
-        self.pandaActor.reparentTo(self.avatarNP)
-
-        gravityFN = ForceNode('world-forces')
-        gravityFNP = render.attachNewNode(gravityFN)
         gravityForce = LinearVectorForce(0, 0, -9.81)
         gravityForce.setMassDependent(False)
+        gravityFN = ForceNode('world-forces')
         gravityFN.addForce(gravityForce)
-        # Attach it to the global physics manager
+        render.attachNewNode(gravityFN)
         base.physicsMgr.addLinearForce(gravityForce)
 
+        self.avatarNP = render.attachNewNode(ActorNode("player"))
+        self.avatarNP.node().getPhysicsObject().setMass(50.)
+        self.pandaActor.reparentTo(self.avatarNP)
         base.physicsMgr.attachPhysicalNode(self.avatarNP.node())
+
+        self.avatarNP.setPos(15, 10, 5)
 
         ######### Collisions #########
 
@@ -179,7 +178,9 @@ class MyApp(ShowBase):
 
         self.disableMouse()
 
-        self.cam.setHpr(0, 0, 0)
+        self.mainCamera = Camera(self.camera)
+
+        self.mainCamera.camObject.setHpr(0, 0, 0)
 
         ######### Events #########
 
@@ -199,6 +200,7 @@ class MyApp(ShowBase):
         self.accept("space-up", self.setKey, ["space", 0])
         self.accept("wheel_up", self.zoomCamera, [-1])
         self.accept("wheel_down", self.zoomCamera, [1])
+        self.accept("escape", exit, [])
 
         self.accept('window-event', self.handleWindowEvent)
 
@@ -216,8 +218,6 @@ class MyApp(ShowBase):
     def b(self, hey):
 
         self.avatarLanded = True
-
-        print "fucky"
 
     def setKey(self, key, value):
 
@@ -239,6 +239,14 @@ class MyApp(ShowBase):
         #Compensate for inconsistent update intervals
 
         dt = globalClock.getDt()
+
+        if GAME_MODE == MAIN_MENU:
+
+            pass
+
+        if GAME_MODE == IN_GAME_MENU:
+
+            pass
 
         if GAME_MODE == NORMAL:
 
@@ -301,12 +309,12 @@ class MyApp(ShowBase):
 
             if current_mouse_x < 5 or current_mouse_x >= (self.win_center_x * 1.5):
 
-                base.win.movePointer(0, self.win_center_x, self.win_center_y)
+                base.win.movePointer(0, self.win_center_x, current_mouse_y)
                 self.last_mouse_x = self.win_center_x
 
             if current_mouse_y < 5 or current_mouse_y >= (self.win_center_y * 1.5):
 
-                base.win.movePointer(0, self.win_center_x, self.win_center_y)
+                base.win.movePointer(0, current_mouse_x, self.win_center_y)
                 self.last_mouse_y = self.win_center_y
 
             yaw_shift = -((mouse_shift_x) * Camera.ROT_RATE[0])
@@ -325,8 +333,8 @@ class MyApp(ShowBase):
 
             self.avatarNP.setH(self.avatarYawRot)
 
-            self.cam.setH(self.avatarYawRot)
-            self.cam.setP(self.avatarPitchRot)
+            self.mainCamera.camObject.setH(self.avatarYawRot)
+            self.mainCamera.camObject.setP(self.avatarPitchRot)
 
             if NAVIGATION_MODE == TERRAIN:
 
@@ -343,8 +351,10 @@ class MyApp(ShowBase):
             cam_x_adjust = xy_plane_cam_dist*sin(radians(self.avatarYawRot))  
             cam_y_adjust = xy_plane_cam_dist*cos(radians(self.avatarYawRot))
 
-            self.cam.setPos(self.avatarNP.getX() + cam_x_adjust, self.avatarNP.getY() - cam_y_adjust, 
+            self.mainCamera.camObject.setPos(self.avatarNP.getX() + cam_x_adjust, self.avatarNP.getY() - cam_y_adjust, 
                             self.avatarNP.getZ() + cam_z_adjust)
+
+            #Find collisions
 
             self.cTrav.traverse(render)
 
