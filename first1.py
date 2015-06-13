@@ -6,11 +6,12 @@ from direct.task import Task
 from direct.actor.Actor import Actor
 from direct.interval.IntervalGlobal import Sequence
 from panda3d.core import Point3, BitMask32, Vec3
-from panda3d.core import CollisionTraverser,CollisionNode, CollisionHandlerFloor
-from panda3d.core import CollisionHandlerEvent
+from panda3d.core import CollisionTraverser,CollisionNode, CollisionHandlerFloor, CollisionHandlerEvent
 from panda3d.core import CollisionSphere, CollisionRay
 from panda3d.core import GeoMipTerrain, loadPrcFileData
+from panda3d.core import Fog
 from panda3d.physics import *
+from direct.gui.DirectGui import *
 from pandac.PandaModules import WindowProperties
 
 ########## Gameplay variables #########
@@ -21,14 +22,10 @@ MAIN_MENU = 0
 NORMAL = 1
 IN_GAME_MENU = 2
 
-GAME_MODE = NORMAL
-
 #Navigation modes
 
 TERRAIN = 0
 SPACE = 1
-
-NAVIGATION_MODE = TERRAIN
 
 class PlayerVessel(object):
 
@@ -68,22 +65,33 @@ class Camera(object):
     def __init__(self, cameraObject):
 
         self.camObject = cameraObject
+
+        self.pitch_rot = 0
  
-class MyApp(ShowBase):
+class Game(ShowBase):
 
     def __init__(self):
 
         ShowBase.__init__(self)
 
+        ########## Window configuration #########
+
         wp = WindowProperties()
         wp.setSize(1024, 860)
+
         self.win.requestProperties(wp)
+
+        ########## Gameplay settings #########
+
+        self.GAME_MODE = NORMAL
+        self.NAVIGATION_MODE = TERRAIN
+
+        self.mode_initialized = False
 
         ########## Terrain #########
 
         self.environ = loader.loadModel("models/environment")
-        self.environ.setName("terrain")
-        #self.environ.setScale(.25, .25, .25)
+        self.environ.setScale(.25, .25, .25)
         self.environ.reparentTo(render)
         self.environ.setCollideMask(BitMask32.bit(0))
 
@@ -96,7 +104,7 @@ class MyApp(ShowBase):
         self.pandaActor.setPythonTag("moving", False)
         self.pandaActor.setCollideMask(BitMask32.allOff())
         self.avatarYawRot = 0
-        self.avatarPitchRot = 0
+        self.pitchRot = 0
         self.avatarLanded = True
         self.jumpThrusting = False
         self.jumpThrustCounter = 10
@@ -200,7 +208,7 @@ class MyApp(ShowBase):
         self.accept("space-up", self.setKey, ["space", 0])
         self.accept("wheel_up", self.zoomCamera, [-1])
         self.accept("wheel_down", self.zoomCamera, [1])
-        self.accept("escape", exit, [])
+        self.accept("escape", self.switchGameMode, [])
 
         self.accept('window-event', self.handleWindowEvent)
 
@@ -208,20 +216,24 @@ class MyApp(ShowBase):
 
         ######### Mouse #########
 
-        props = WindowProperties()
-        props.setCursorHidden(True) 
-        base.win.requestProperties(props)
-
         self.last_mouse_x = self.win.getPointer(0).getX()
         self.last_mouse_y = self.win.getPointer(0).getY()
 
-    def b(self, hey):
+        ######### GUI #########
 
-        self.avatarLanded = True
+        self.gui_elements = []
 
     def setKey(self, key, value):
 
         self.keys[key] = value
+
+    def zoomCamera(self, direction):
+
+        Camera.AVATAR_DIST += direction
+
+    def b(self, hey):
+
+        self.avatarLanded = True
 
     def handleWindowEvent(self, window=None):
 
@@ -230,9 +242,51 @@ class MyApp(ShowBase):
         self.win_center_x = wp.getXSize() / 2
         self.win_center_y = wp.getYSize() / 2
 
-    def zoomCamera(self, direction):
+    def switchGameMode(self, newGameMode=None):
 
-        Camera.AVATAR_DIST += direction
+        self.cleanupGUI()
+
+        if newGameMode: self.GAME_MODE = newGameMode
+
+        else:
+
+            if self.GAME_MODE == IN_GAME_MENU: 
+
+                render.clearFog()
+                self.GAME_MODE = NORMAL
+
+            elif self.GAME_MODE == NORMAL: self.GAME_MODE = IN_GAME_MENU
+            elif self.GAME_MODE == MAIN_MENU: exit()
+
+        self.mode_initialized = False
+
+    def cleanupGUI(self):
+
+        for gui_element in self.gui_elements:
+
+            gui_element.destroy()
+
+    def buildInGameMenu(self):
+
+        props = WindowProperties()
+        props.setCursorHidden(False) 
+        base.win.requestProperties(props)
+
+        self.gui_elements.append(DirectButton(text = "Exit", scale = .1,
+                            command = self.b, pos = Vec3(0, 0, -.1)))
+
+        self.mode_initialized = True
+
+    def buildMainMenu(self):
+
+        props = WindowProperties()
+        props.setCursorHidden(False) 
+        base.win.requestProperties(props)
+
+        self.gui_elements.append(DirectButton(text = "Start", scale = .1,
+                            command = self.b, pos = Vec3(0, 0, -.1)))
+
+        self.mode_initialized = True
 
     def gameLoop(self, task):
 
@@ -240,15 +294,35 @@ class MyApp(ShowBase):
 
         dt = globalClock.getDt()
 
-        if GAME_MODE == MAIN_MENU:
+        if self.GAME_MODE == MAIN_MENU:
 
-            pass
+            if not self.mode_initialized:
 
-        if GAME_MODE == IN_GAME_MENU:
+                self.buildMainMenu()
 
-            pass
+        if self.GAME_MODE == IN_GAME_MENU:
 
-        if GAME_MODE == NORMAL:
+            if not self.mode_initialized:
+
+                inGameMenuFogColor = (50,150,50)
+
+                inGameMenuFog = Fog("inGameMenuFog")
+
+                inGameMenuFog.setMode(Fog.MExponential)
+                inGameMenuFog.setColor(*inGameMenuFogColor)
+                inGameMenuFog.setExpDensity(.01)
+
+                render.setFog(inGameMenuFog)
+
+                self.buildInGameMenu()
+
+        if self.GAME_MODE == NORMAL:
+
+            if not self.mode_initialized:
+
+                props = WindowProperties()
+                props.setCursorHidden(True) 
+                base.win.requestProperties(props)
 
             #Handle keyboard input
 
@@ -271,10 +345,10 @@ class MyApp(ShowBase):
                         self.jumpThrusting = True
                         self.jumpThrustCounter = 0
 
-                        thrustFN = ForceNode('world-forces')
-
                         self.jumpThrustForce = LinearVectorForce(0, 0, 50)
                         self.jumpThrustForce.setMassDependent(False)
+
+                        thrustFN = ForceNode('world-forces')
 
                         thrustFN.addForce(self.jumpThrustForce)
 
@@ -321,32 +395,32 @@ class MyApp(ShowBase):
             pitch_shift = -((mouse_shift_y) * Camera.ROT_RATE[1])
 
             self.avatarYawRot += yaw_shift
-            self.avatarPitchRot += pitch_shift
+            self.pitchRot += pitch_shift
 
-            if self.avatarPitchRot > Camera.MAX_PITCH_ROT:
+            if self.pitchRot > Camera.MAX_PITCH_ROT:
 
-                self.avatarPitchRot = Camera.MAX_PITCH_ROT
+                self.pitchRot = Camera.MAX_PITCH_ROT
 
-            elif self.avatarPitchRot < Camera.MIN_PITCH_ROT:
+            elif self.pitchRot < Camera.MIN_PITCH_ROT:
 
-                self.avatarPitchRot = Camera.MIN_PITCH_ROT
+                self.pitchRot = Camera.MIN_PITCH_ROT
 
             self.avatarNP.setH(self.avatarYawRot)
 
             self.mainCamera.camObject.setH(self.avatarYawRot)
-            self.mainCamera.camObject.setP(self.avatarPitchRot)
+            self.mainCamera.camObject.setP(self.pitchRot)
 
-            if NAVIGATION_MODE == TERRAIN:
+            if self.NAVIGATION_MODE == TERRAIN:
 
                 xy_plane_cam_dist = Camera.AVATAR_DIST
 
                 cam_z_adjust = Camera.ELEVATION
 
-            elif NAVIGATION_MODE == SPACE:
+            elif self.NAVIGATION_MODE == SPACE:
 
-                xy_plane_cam_dist = Camera.AVATAR_DIST*cos(radians(self.avatarPitchRot))
+                xy_plane_cam_dist = Camera.AVATAR_DIST*cos(radians(self.pitchRot))
             
-                cam_z_adjust = Camera.AVATAR_DIST*sin(radians(self.avatarPitchRot))
+                cam_z_adjust = Camera.AVATAR_DIST*sin(radians(self.pitchRot))
 
             cam_x_adjust = xy_plane_cam_dist*sin(radians(self.avatarYawRot))  
             cam_y_adjust = xy_plane_cam_dist*cos(radians(self.avatarYawRot))
@@ -360,5 +434,5 @@ class MyApp(ShowBase):
 
         return Task.cont
  
-app = MyApp()
+app = Game()
 app.run()
