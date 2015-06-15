@@ -29,7 +29,7 @@ if True:
 	#textures1 = ["default_c.png", "maps/default_d.png", "maps/default_l.png", 
 	#			"textures/bigRockFace.png", "textures/hardDirt.png", "textures/grayRock.png", "textures/shortGrass.png"]
 
-	textures = ["textures/hardDirt.png"]
+	textures = ["maps/hardDirt.png"]
 
 	#for i in range(heightfieldIndex + 1, len(sys.argv)-1):
 	i = 0

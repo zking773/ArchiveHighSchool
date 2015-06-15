@@ -65,8 +65,6 @@ class Camera(object):
     def __init__(self, cameraObject):
 
         self.camObject = cameraObject
-
-        self.pitch_rot = 0
  
 class Game(ShowBase):
 
@@ -91,8 +89,9 @@ class Game(ShowBase):
         ########## Terrain #########
 
         self.environ = loader.loadModel("models/environment")
-        self.environ.setScale(.25, .25, .25)
+        #self.environ.setScale(.05, .05, .05)
         self.environ.reparentTo(render)
+        self.environ.setPos(0, 0, 0)
         self.environ.setCollideMask(BitMask32.bit(0))
 
         ######### Game objects #########
@@ -130,7 +129,6 @@ class Game(ShowBase):
         ######### Collisions #########
 
         self.cTrav = CollisionTraverser()
-        #self.cTrav.showCollisions(base.render)
 
         #Make player rigid body
 
@@ -214,11 +212,6 @@ class Game(ShowBase):
 
         self.accept('playerGroundRayJumping-in', self.b)
 
-        ######### Mouse #########
-
-        self.last_mouse_x = self.win.getPointer(0).getX()
-        self.last_mouse_y = self.win.getPointer(0).getY()
-
         ######### GUI #########
 
         self.gui_elements = []
@@ -266,16 +259,43 @@ class Game(ShowBase):
 
             gui_element.destroy()
 
+    def evenButtonPositions(self, button_spacing, button_height):
+
+        return ((button_spacing/2.0)*3+(button_height/2.0), (button_spacing/2.0)+(button_height/2.0),
+         -(button_spacing/2.0)+(button_height/2.0), -(button_spacing/2.0)*3+(button_height/2.0))
+
     def buildInGameMenu(self):
 
         props = WindowProperties()
         props.setCursorHidden(False) 
         base.win.requestProperties(props)
 
-        self.gui_elements.append(DirectButton(text = "Exit", scale = .1,
-                            command = self.b, pos = Vec3(0, 0, -.1)))
+        resume_button = DirectButton(text = "Resume", scale = .1, command = self.switchGameMode,
+                                    rolloverSound=None)
 
-        self.mode_initialized = True
+        main_menu_button = DirectButton(text = "Main Menu", scale = .1, command = self.b,
+                                    rolloverSound=None)
+
+        options_button = DirectButton(text = "Options", scale = .1, command = self.b,
+                                    rolloverSound=None)
+
+        exit_button = DirectButton(text = "Exit", scale = .1, command = exit,
+                                    rolloverSound=None)
+
+        BUTTON_SPACING = .2
+        BUTTON_HEIGHT = resume_button.getSy()
+
+        button_positions = self.evenButtonPositions(BUTTON_SPACING, BUTTON_HEIGHT)
+
+        resume_button.setPos(Vec3(0, 0, button_positions[0]))
+        main_menu_button.setPos(Vec3(0, 0, button_positions[1]))
+        options_button.setPos(Vec3(0, 0, button_positions[2]))
+        exit_button.setPos(Vec3(0, 0, button_positions[3]))
+
+        self.gui_elements.append(resume_button)
+        self.gui_elements.append(main_menu_button)
+        self.gui_elements.append(options_button)
+        self.gui_elements.append(exit_button)
 
     def buildMainMenu(self):
 
@@ -283,10 +303,32 @@ class Game(ShowBase):
         props.setCursorHidden(False) 
         base.win.requestProperties(props)
 
-        self.gui_elements.append(DirectButton(text = "Start", scale = .1,
-                            command = self.b, pos = Vec3(0, 0, -.1)))
+        start_game_button = DirectButton(text = "Start", scale = .1,
+                            command = self.b)
 
-        self.mode_initialized = True
+        select_level_button = DirectButton(text = "Select Level", scale = .1,
+                            command = self.b)
+
+        game_options_button = DirectButton(text = "Options", scale = .1,
+                            command = self.b)
+
+        exit_button = DirectButton(text = "Exit", scale = .1,
+                            command = exit)
+
+        BUTTON_SPACING = .2
+        BUTTON_HEIGHT = start_game_button.getSy()
+
+        button_positions = self.evenButtonPositions(BUTTON_SPACING, BUTTON_HEIGHT)
+
+        start_game_button.setPos(Vec3(0, 0, button_positions[0]))
+        select_level_button.setPos(Vec3(0, 0, button_positions[1]))
+        game_options_button.setPos(Vec3(0, 0, button_positions[2]))
+        exit_button.setPos(Vec3(0, 0, button_positions[3]))
+
+        self.gui_elements.append(start_game_button)
+        self.gui_elements.append(select_level_button)
+        self.gui_elements.append(game_options_button)
+        self.gui_elements.append(exit_button)
 
     def gameLoop(self, task):
 
@@ -299,6 +341,8 @@ class Game(ShowBase):
             if not self.mode_initialized:
 
                 self.buildMainMenu()
+
+                self.mode_initialized = True
 
         if self.GAME_MODE == IN_GAME_MENU:
 
@@ -316,6 +360,8 @@ class Game(ShowBase):
 
                 self.buildInGameMenu()
 
+                self.mode_initialized = True
+
         if self.GAME_MODE == NORMAL:
 
             if not self.mode_initialized:
@@ -323,6 +369,11 @@ class Game(ShowBase):
                 props = WindowProperties()
                 props.setCursorHidden(True) 
                 base.win.requestProperties(props)
+
+                self.last_mouse_x = self.win.getPointer(0).getX()
+                self.last_mouse_y = self.win.getPointer(0).getY()
+
+                self.mode_initialized = True
 
             #Handle keyboard input
 
