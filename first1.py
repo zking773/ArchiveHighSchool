@@ -111,6 +111,16 @@ class Avatar(object):
 
                     self.objectNP.node().getPhysical(0).addLinearForce(self.jumpThrustForce)
 
+        #Jump legality
+
+        if self.landGap >= Avatar.LAND_GAP_PERMISSION:
+
+            self.landed = False
+
+        elif self.landGap > 0:
+
+            self.landGap += 1
+
     def applyFriction(self, friction):
 
         for component, i in enumerate(friction):
@@ -131,9 +141,7 @@ class Avatar(object):
 
         elif type == "out" and collisionRecipient == "terrain":
 
-            if self.landGap < Avatar.LAND_GAP_PERMISSION: self.landGap += 1
-
-            else: self.landed = False
+            self.landGap = 1
 
 class Camera(object):
 
@@ -173,7 +181,6 @@ class Game(ShowBase):
         ########## Terrain #########
 
         self.environ = loader.loadModel("models/world")
-        #self.environ.setScale(.05, .05, .05)
         self.environ.reparentTo(render)
         self.environ.setPos(0, 0, 0)
         self.environ.setCollideMask(BitMask32.bit(0))
