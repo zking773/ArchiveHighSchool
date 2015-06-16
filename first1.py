@@ -27,35 +27,117 @@ IN_GAME_MENU = 2
 TERRAIN = 0
 SPACE = 1
 
-class PlayerVessel(object):
+class Avatar(object):
 
-    def __init__(self, modelNodePath):
+    max_velocity = (5, 15)
+    acceleration = (.1, .5)
 
-        self.modelNodePath = modelNodePath
+    LAND_GAP_PERMISSION = 5
+
+    def __init__(self, objectNP):
+
+        self.objectNP = objectNP
 
         self.speed = Vec3(0, 0, 0)
 
+        #Jumping variables
+
+        self.landed = False
+        self.landGap = 0
+        self.jumpThrusting = False
+        self.jumpThrustCounter = 10
+
     def move(self, dt):
 
-        self.modelNodePath.setPos(self.modelNodePath,
+        #Move around
+
+        self.objectNP.setPos(self.objectNP,
             self.speed[0]*dt, self.speed[1]*dt,
             self.speed[2]*dt)
 
-    def getCollisionSphere(self):
+        #Jump
 
-        return None
+        if self.jumpThrusting:
+
+            self.landed = False
+
+            if self.jumpThrustCounter < 10:
+
+                self.jumpThrustCounter += 1
+
+            else:
+
+                self.objectNP.node().getPhysical(0).removeLinearForce(self.jumpThrustForce)
+
+                self.jumpThrusting = False
 
     def handleKeys(self, keys):
 
-        return None
+        #Navigate
 
-    def handleCollisionEvent(self, eventName):
+        if keys["w"]: self.speed[1] += Avatar.acceleration[1]
 
-        return None
+        if keys["s"]: self.speed[1] += -Avatar.acceleration[1] 
+
+        if keys["a"]: self.speed[0] += -Avatar.acceleration[0]
+
+        if keys["d"]: self.speed[0] += Avatar.acceleration[0]
+
+        for i, bound in enumerate(Avatar.max_velocity):
+
+            if self.speed[i] > bound:
+
+                self.speed[i] = bound
+
+        #Jump requests
+
+        if keys["space"]:
+
+            if self.landed:
+
+                if self.jumpThrustCounter == 10 and not self.jumpThrusting:
+
+                    self.landed = False
+
+                    self.jumpThrusting = True
+                    self.jumpThrustCounter = 0
+
+                    self.jumpThrustForce = LinearVectorForce(0, 0, 50)
+                    self.jumpThrustForce.setMassDependent(False)
+
+                    thrustFN = ForceNode('world-forces')
+
+                    thrustFN.addForce(self.jumpThrustForce)
+
+                    self.objectNP.node().getPhysical(0).addLinearForce(self.jumpThrustForce)
+
+    def applyFriction(self, friction):
+
+        for component, i in enumerate(friction):
+
+            self.speed[i] -= component
+
+    def handleCollisionEvent(self, type, event):
+
+        collisionRecipient = event.getIntoNodePath().getName()
+
+        #Jump legality
+
+        if type == "in" and collisionRecipient == "terrain":
+
+            self.landed = True
+
+            self.landGap = 0
+
+        elif type == "out" and collisionRecipient == "terrain":
+
+            if self.landGap < Avatar.LAND_GAP_PERMISSION: self.landGap += 1
+
+            else: self.landed = False
 
 class Camera(object):
 
-    ROT_RATE = (.5, .25)
+    ROT_RATE = (.4, .25)
     ELEVATION = 5
     AVATAR_DIST = 20
 
@@ -65,6 +147,8 @@ class Camera(object):
     def __init__(self, cameraObject):
 
         self.camObject = cameraObject
+
+        self.pitchRot = 0
  
 class Game(ShowBase):
 
@@ -88,13 +172,13 @@ class Game(ShowBase):
 
         ########## Terrain #########
 
-        self.environ = loader.loadModel("models/environment")
+        self.environ = loader.loadModel("models/world")
         #self.environ.setScale(.05, .05, .05)
         self.environ.reparentTo(render)
         self.environ.setPos(0, 0, 0)
         self.environ.setCollideMask(BitMask32.bit(0))
 
-        ######### Game objects #########
+        ######### Models #########
 
         self.pandaActor = Actor("models/panda",
                                 {"walk": "models/panda-walk"})
@@ -103,10 +187,6 @@ class Game(ShowBase):
         self.pandaActor.setPythonTag("moving", False)
         self.pandaActor.setCollideMask(BitMask32.allOff())
         self.avatarYawRot = 0
-        self.pitchRot = 0
-        self.avatarLanded = True
-        self.jumpThrusting = False
-        self.jumpThrustCounter = 10
 
         ######### Physics #########
 
@@ -119,12 +199,16 @@ class Game(ShowBase):
         render.attachNewNode(gravityFN)
         base.physicsMgr.addLinearForce(gravityForce)
 
-        self.avatarNP = render.attachNewNode(ActorNode("player"))
-        self.avatarNP.node().getPhysicsObject().setMass(50.)
-        self.pandaActor.reparentTo(self.avatarNP)
-        base.physicsMgr.attachPhysicalNode(self.avatarNP.node())
+        self.avatarPhysicsActorNP = render.attachNewNode(ActorNode("player"))
+        self.avatarPhysicsActorNP.node().getPhysicsObject().setMass(50.)
+        self.pandaActor.reparentTo(self.avatarPhysicsActorNP)
+        base.physicsMgr.attachPhysicalNode(self.avatarPhysicsActorNP.node())
 
-        self.avatarNP.setPos(15, 10, 5)
+        self.avatarPhysicsActorNP.setPos(15, 10, 5)
+
+        ######### Game objects #########
+
+        self.avatar = Avatar(self.avatarPhysicsActorNP)
 
         ######### Collisions #########
 
@@ -139,11 +223,11 @@ class Game(ShowBase):
         self.pandaBodySphereNode.setFromCollideMask(BitMask32.bit(0))
         self.pandaBodySphereNode.setIntoCollideMask(BitMask32.allOff())
 
-        self.pandaBodySphereNodepath = self.avatarNP.attachNewNode(self.pandaBodySphereNode)
+        self.pandaBodySphereNodepath = self.avatar.objectNP.attachNewNode(self.pandaBodySphereNode)
         self.pandaBodySphereNodepath.show()
 
         self.pandaBodyCollisionHandler = PhysicsCollisionHandler()
-        self.pandaBodyCollisionHandler.addCollider(self.pandaBodySphereNodepath, self.avatarNP)
+        self.pandaBodyCollisionHandler.addCollider(self.pandaBodySphereNodepath, self.avatar.objectNP)
 
         #Keep player on ground
 
@@ -154,11 +238,11 @@ class Game(ShowBase):
         self.pandaGroundSphereNode.setFromCollideMask(BitMask32.bit(0))
         self.pandaGroundSphereNode.setIntoCollideMask(BitMask32.allOff())
 
-        self.pandaGroundSphereNodepath = self.avatarNP.attachNewNode(self.pandaGroundSphereNode)
+        self.pandaGroundSphereNodepath = self.avatar.objectNP.attachNewNode(self.pandaGroundSphereNode)
         self.pandaGroundSphereNodepath.show()
 
         self.pandaGroundCollisionHandler = PhysicsCollisionHandler()
-        self.pandaGroundCollisionHandler.addCollider(self.pandaGroundSphereNodepath, self.avatarNP)
+        self.pandaGroundCollisionHandler.addCollider(self.pandaGroundSphereNodepath, self.avatar.objectNP)
 
         #Notify when player lands
 
@@ -169,7 +253,7 @@ class Game(ShowBase):
         self.pandaGroundRayNodeJumping.setFromCollideMask(BitMask32.bit(0))
         self.pandaGroundRayNodeJumping.setIntoCollideMask(BitMask32.allOff())
 
-        self.pandaGroundRayNodepathJumping = self.avatarNP.attachNewNode(self.pandaGroundRayNodeJumping)
+        self.pandaGroundRayNodepathJumping = self.avatar.objectNP.attachNewNode(self.pandaGroundRayNodeJumping)
         self.pandaGroundRayNodepathJumping.show()
 
         self.collisionNotifier = CollisionHandlerEvent()
@@ -206,11 +290,12 @@ class Game(ShowBase):
         self.accept("space-up", self.setKey, ["space", 0])
         self.accept("wheel_up", self.zoomCamera, [-1])
         self.accept("wheel_down", self.zoomCamera, [1])
-        self.accept("escape", self.switchGameMode, [])
+        self.accept("escape", self.switchGameMode, [IN_GAME_MENU])
 
         self.accept('window-event', self.handleWindowEvent)
 
-        self.accept('playerGroundRayJumping-in', self.b)
+        self.accept('playerGroundRayJumping-in', self.avatar.handleCollisionEvent, ["in"])
+        self.accept('playerGroundRayJumping-out', self.avatar.handleCollisionEvent, ["out"])
 
         ######### GUI #########
 
@@ -239,17 +324,21 @@ class Game(ShowBase):
 
         self.cleanupGUI()
 
-        if newGameMode: self.GAME_MODE = newGameMode
+        if self.GAME_MODE == IN_GAME_MENU: 
 
-        else:
-
-            if self.GAME_MODE == IN_GAME_MENU: 
+            if newGameMode == NORMAL:
 
                 render.clearFog()
-                self.GAME_MODE = NORMAL
 
-            elif self.GAME_MODE == NORMAL: self.GAME_MODE = IN_GAME_MENU
-            elif self.GAME_MODE == MAIN_MENU: exit()
+            elif newGameMode == MAIN_MENU:
+
+                print "bubbles!"
+
+        elif True:
+
+            pass
+
+        self.GAME_MODE = newGameMode
 
         self.mode_initialized = False
 
@@ -259,10 +348,21 @@ class Game(ShowBase):
 
             gui_element.destroy()
 
-    def evenButtonPositions(self, button_spacing, button_height):
+    def evenButtonPositions(self, button_spacing, button_height, num_buttons):
 
-        return ((button_spacing/2.0)*3+(button_height/2.0), (button_spacing/2.0)+(button_height/2.0),
-         -(button_spacing/2.0)+(button_height/2.0), -(button_spacing/2.0)*3+(button_height/2.0))
+        center_offset = (button_spacing/(2.0) if (num_buttons % 2 == 0) else 0)
+
+        button_positions = []
+
+        current_pos = center_offset + ((num_buttons - 1)/2) * button_spacing
+
+        for i in range(0, num_buttons):
+
+            button_positions.append(current_pos + (button_height/2.0))
+
+            current_pos -= button_spacing
+
+        return button_positions
 
     def buildInGameMenu(self):
 
@@ -270,7 +370,7 @@ class Game(ShowBase):
         props.setCursorHidden(False) 
         base.win.requestProperties(props)
 
-        resume_button = DirectButton(text = "Resume", scale = .1, command = self.switchGameMode,
+        resume_button = DirectButton(text = "Resume", scale = .1, command = (lambda: self.switchGameMode(NORMAL)),
                                     rolloverSound=None)
 
         main_menu_button = DirectButton(text = "Main Menu", scale = .1, command = self.b,
@@ -285,7 +385,7 @@ class Game(ShowBase):
         BUTTON_SPACING = .2
         BUTTON_HEIGHT = resume_button.getSy()
 
-        button_positions = self.evenButtonPositions(BUTTON_SPACING, BUTTON_HEIGHT)
+        button_positions = self.evenButtonPositions(BUTTON_SPACING, BUTTON_HEIGHT, 4)
 
         resume_button.setPos(Vec3(0, 0, button_positions[0]))
         main_menu_button.setPos(Vec3(0, 0, button_positions[1]))
@@ -348,7 +448,7 @@ class Game(ShowBase):
 
             if not self.mode_initialized:
 
-                inGameMenuFogColor = (50,150,50)
+                inGameMenuFogColor = (50, 150, 50)
 
                 inGameMenuFog = Fog("inGameMenuFog")
 
@@ -377,47 +477,8 @@ class Game(ShowBase):
 
             #Handle keyboard input
 
-            if self.keys["w"]: self.avatarNP.setY(self.avatarNP, 5 * dt)
-
-            if self.keys["s"]: self.avatarNP.setY(self.avatarNP, -5 * dt)
-
-            if self.keys["a"]: self.avatarNP.setX(self.avatarNP, -5 * dt)
-
-            if self.keys["d"]: self.avatarNP.setX(self.avatarNP, 5 * dt)
-
-            if self.avatarLanded:
-
-                if self.keys["space"]:
-
-                    if self.jumpThrustCounter == 10 and not self.jumpThrusting:
-
-                        self.avatarLanded = False
-
-                        self.jumpThrusting = True
-                        self.jumpThrustCounter = 0
-
-                        self.jumpThrustForce = LinearVectorForce(0, 0, 50)
-                        self.jumpThrustForce.setMassDependent(False)
-
-                        thrustFN = ForceNode('world-forces')
-
-                        thrustFN.addForce(self.jumpThrustForce)
-
-                        self.avatarNP.node().getPhysical(0).addLinearForce(self.jumpThrustForce)
-
-            if self.jumpThrusting:
-
-                self.avatarLanded = False
-
-                if self.jumpThrustCounter < 10:
-
-                    self.jumpThrustCounter += 1
-
-                else:
-
-                    self.avatarNP.node().getPhysical(0).removeLinearForce(self.jumpThrustForce)
-
-                    self.jumpThrusting = False
+            self.avatar.handleKeys(self.keys)
+            self.avatar.move(dt)
 
             #Mouse-based viewpoint rotation
 
@@ -446,20 +507,20 @@ class Game(ShowBase):
             pitch_shift = -((mouse_shift_y) * Camera.ROT_RATE[1])
 
             self.avatarYawRot += yaw_shift
-            self.pitchRot += pitch_shift
+            self.mainCamera.pitchRot += pitch_shift
 
-            if self.pitchRot > Camera.MAX_PITCH_ROT:
+            if self.mainCamera.pitchRot > Camera.MAX_PITCH_ROT:
 
-                self.pitchRot = Camera.MAX_PITCH_ROT
+                self.mainCamera.pitchRot = Camera.MAX_PITCH_ROT
 
-            elif self.pitchRot < Camera.MIN_PITCH_ROT:
+            elif self.mainCamera.pitchRot < Camera.MIN_PITCH_ROT:
 
-                self.pitchRot = Camera.MIN_PITCH_ROT
+                self.mainCamera.pitchRot = Camera.MIN_PITCH_ROT
 
-            self.avatarNP.setH(self.avatarYawRot)
+            self.avatar.objectNP.setH(self.avatarYawRot)
 
             self.mainCamera.camObject.setH(self.avatarYawRot)
-            self.mainCamera.camObject.setP(self.pitchRot)
+            self.mainCamera.camObject.setP(self.mainCamera.pitchRot)
 
             if self.NAVIGATION_MODE == TERRAIN:
 
@@ -476,8 +537,8 @@ class Game(ShowBase):
             cam_x_adjust = xy_plane_cam_dist*sin(radians(self.avatarYawRot))  
             cam_y_adjust = xy_plane_cam_dist*cos(radians(self.avatarYawRot))
 
-            self.mainCamera.camObject.setPos(self.avatarNP.getX() + cam_x_adjust, self.avatarNP.getY() - cam_y_adjust, 
-                            self.avatarNP.getZ() + cam_z_adjust)
+            self.mainCamera.camObject.setPos(self.avatar.objectNP.getX() + cam_x_adjust, self.avatar.objectNP.getY() - cam_y_adjust, 
+                            self.avatar.objectNP.getZ() + cam_z_adjust)
 
             #Find collisions
 
