@@ -162,6 +162,8 @@ class Camera(object):
     MIN_PITCH_ROT = -20
     MAX_PITCH_ROT = 20
 
+    FLEX_ROT_MAG = (20, 20)
+
     def __init__(self, cameraObject):
 
         self.camObject = cameraObject
@@ -184,11 +186,13 @@ class GameContainer(ShowBase):
         ########## Gameplay settings #########
 
         self.GAME_MODE = NORMAL
-        self.NAVIGATION_MODE = TERRAIN
+        self.NAVIGATION_MODE = SPACE
 
         self.mode_initialized = False
 
-        self.loadWorld()
+        #Trigger game chain
+
+        self.loadWorld(LEVEL)
 
         ######### Camera #########
 
@@ -227,7 +231,18 @@ class GameContainer(ShowBase):
 
         self.gui_elements = []
 
-    def loadWorld(self, level=1):
+    def loadWorld(self, level):
+
+        self.avatarActor = Actor("models/panda",
+                                {"walk": "models/panda-walk"})
+        self.avatarActor.setScale(.5, .5, .5)
+        self.avatarActor.setHpr(180, 0, 0)
+        self.avatarActor.setPythonTag("moving", False)
+        self.avatarActor.setCollideMask(BitMask32.allOff())
+
+        if int(level) == level:
+
+            pass
 
         ########## Terrain #########
 
@@ -239,12 +254,7 @@ class GameContainer(ShowBase):
 
         ######### Models #########
 
-        self.avatarActor = Actor("models/panda",
-                                {"walk": "models/panda-walk"})
-        self.avatarActor.setScale(.5, .5, .5)
-        self.avatarActor.setHpr(180, 0, 0)
-        self.avatarActor.setPythonTag("moving", False)
-        self.avatarActor.setCollideMask(BitMask32.allOff())
+        
 
         ######### Physics #########
 
@@ -467,6 +477,8 @@ class GameContainer(ShowBase):
 
         if self.GAME_MODE == IN_GAME_MENU:
 
+            #Fog out background
+
             if not self.mode_initialized:
 
                 inGameMenuFogColor = (50, 150, 50)
@@ -496,12 +508,20 @@ class GameContainer(ShowBase):
 
                 self.mode_initialized = True
 
+            if self.NAVIGATION_MODE == TERRAIN:
+
+                pass
+
+            elif self.NAVIGATION_MODE == SPACE:
+
+                pass
+
             #Handle keyboard input
 
             self.avatar.handleKeys(self.keys)
             self.avatar.move(dt)
 
-            #Mouse-based viewpoint rotation
+            ########## Mouse-based viewpoint rotation ##########
 
             mouse_pos = self.win.getPointer(0)
 
@@ -530,33 +550,47 @@ class GameContainer(ShowBase):
             self.avatar.yawRot += yaw_shift
             self.mainCamera.pitchRot += pitch_shift
 
-            if self.mainCamera.pitchRot > Camera.MAX_PITCH_ROT:
-
-                self.mainCamera.pitchRot = Camera.MAX_PITCH_ROT
-
-            elif self.mainCamera.pitchRot < Camera.MIN_PITCH_ROT:
-
-                self.mainCamera.pitchRot = Camera.MIN_PITCH_ROT
-
-            self.avatar.objectNP.setH(self.avatar.yawRot)
-
-            self.mainCamera.camObject.setH(self.avatar.yawRot)
-            self.mainCamera.camObject.setP(self.mainCamera.pitchRot)
-
             if self.NAVIGATION_MODE == TERRAIN:
 
-                xy_plane_cam_dist = Camera.AVATAR_DIST
+                if self.mainCamera.pitchRot > Camera.FLEX_ROT_MAG[0]:
 
+                    self.mainCamera.pitchRot = Camera.FLEX_ROT_MAG[0]
+
+                elif self.mainCamera.pitchRot < -Camera.FLEX_ROT_MAG[0]:
+
+                    self.mainCamera.pitchRot = -Camera.FLEX_ROT_MAG[0]
+
+                fixed_plane_cam_dist = Camera.AVATAR_DIST
+
+                cam_x_adjust = fixed_plane_cam_dist*sin(radians(self.avatar.yawRot))  
+                cam_y_adjust = fixed_plane_cam_dist*cos(radians(self.avatar.yawRot))
                 cam_z_adjust = Camera.ELEVATION
+
+                self.avatar.objectNP.setH(self.avatar.yawRot)
+
+                self.mainCamera.camObject.setH(self.avatar.yawRot)
+                self.mainCamera.camObject.setP(self.mainCamera.pitchRot)
 
             elif self.NAVIGATION_MODE == SPACE:
 
-                xy_plane_cam_dist = Camera.AVATAR_DIST*cos(radians(self.pitchRot))
-            
-                cam_z_adjust = Camera.AVATAR_DIST*sin(radians(self.pitchRot))
+                if self.avatar.yawRot > Camera.FLEX_ROT_MAG[1]:
 
-            cam_x_adjust = xy_plane_cam_dist*sin(radians(self.avatar.yawRot))  
-            cam_y_adjust = xy_plane_cam_dist*cos(radians(self.avatar.yawRot))
+                    self.avatar.yawRot = Camera.FLEX_ROT_MAG[1]
+
+                elif self.avatar.yawRot < -Camera.FLEX_ROT_MAG[1]:
+
+                    self.avatar.yawRot = -Camera.FLEX_ROT_MAG[1]
+
+                fixed_plane_cam_dist = Camera.AVATAR_DIST*cos(radians(self.mainCamera.pitchRot))
+
+                cam_x_adjust = 0
+                cam_y_adjust = Camera.AVATAR_DIST*cos(radians(self.mainCamera.pitchRot))
+                cam_z_adjust = Camera.AVATAR_DIST*sin(radians(self.mainCamera.pitchRot))
+
+                #self.avatar.objectNP.setP(self.mainCamera.pitchRot)
+
+                self.mainCamera.camObject.setH(self.avatar.yawRot)
+                self.mainCamera.camObject.setP(-self.mainCamera.pitchRot)
 
             self.mainCamera.camObject.setPos(self.avatar.objectNP.getX() + cam_x_adjust, self.avatar.objectNP.getY() - cam_y_adjust, 
                             self.avatar.objectNP.getZ() + cam_z_adjust)

@@ -1,2 +1,2 @@
-ppython first1.py
+ppython main.py
 cmd
