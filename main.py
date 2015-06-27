@@ -1,16 +1,19 @@
 from math import pi, sin, cos, radians
+from random import randint
 from sys import exit
  
 from direct.showbase.ShowBase import ShowBase
 from direct.task import Task
 from direct.actor.Actor import Actor
 from direct.interval.IntervalGlobal import Sequence
+
 from panda3d.core import Point3, BitMask32, Vec3
-from panda3d.core import CollisionTraverser,CollisionNode, CollisionHandlerFloor, CollisionHandlerEvent
-from panda3d.core import CollisionSphere, CollisionRay
+from panda3d.core import CollisionTraverser, CollisionNode, CollisionHandlerFloor
+from panda3d.core import CollisionHandlerEvent, CollisionSphere, CollisionRay
 from panda3d.core import GeoMipTerrain, loadPrcFileData
 from panda3d.core import Fog
 from panda3d.physics import *
+
 from direct.gui.DirectGui import *
 from pandac.PandaModules import WindowProperties
 
@@ -28,6 +31,25 @@ TERRAIN = 0
 SPACE = 1
 
 LEVEL = 1
+
+class ModelContainer(object):
+
+    def __init__(self, objectNP):
+
+        self.objectNP = objectNP
+
+    def getWrappedSphere(self):
+
+        tightBounds = self.objectNP.getBounds()
+
+        sphereCenter = tightBounds.getCenter()
+        sphereRadius = tightBounds.getRadius()
+
+        return CollisionSphere(sphereCenter, sphereRadius)
+
+    def __del__(self):
+
+        self.objectNP.removeNode()
 
 class Avatar(object):
 
@@ -123,7 +145,7 @@ class Avatar(object):
 
                     self.objectNP.node().getPhysical(0).addLinearForce(self.jumpThrustForce)
 
-        #Jump legality
+        #Jump legality - player must remain out of ground for time interval before jumping forbidden
 
         if self.landGap >= Avatar.LAND_GAP_PERMISSION:
 
@@ -151,15 +173,31 @@ class Avatar(object):
 
             self.landed = True
 
-            print "balls"
-
             self.landGap = 0
 
         elif type == "out" and collisionRecipient.startswith("Ground"):
 
-            print "outie!" 
-
             self.landGap = 1
+
+    def __del__(self):
+
+        self.objectNP.removeNode()
+
+class Asteroid(object):
+
+    FIELD_EXPANSE = (20, 20, 20)
+
+    succession_interval = (5, 5, 5)
+
+    def __init__(self, ref_point):
+
+        self.objectNP = None
+
+        #self.objectNP.set
+
+    def __del__(self):
+
+        self.objectNP.removeNode()
 
 class Camera(object):
 
@@ -248,14 +286,25 @@ class GameContainer(ShowBase):
         #self.avatarActor.setPythonTag("moving", False)
         self.avatarActor.setCollideMask(BitMask32.allOff())
 
+        self.asteroids = []
+
         if int(level) == level:
+
+            self.play_mode = TERRAIN
+
+        else:
+
+            self.play_mode = SPACE
+
+        if self.play_mode == SPACE:
 
             pass
 
-        if self.play_mode == TERRAIN:
+        elif self.play_mode == TERRAIN:
 
             ########## Terrain #########
 
+            #self.environ = loader.loadModel("../mystuff/test.egg")
             self.environ = loader.loadModel("models/environment")
             self.environ.setName("terrain")
             self.environ.reparentTo(render)
@@ -339,6 +388,14 @@ class GameContainer(ShowBase):
             self.cTrav.addCollider(self.pandaGroundSphereNodepath, self.pandaGroundCollisionHandler)
             self.cTrav.addCollider(self.pandaGroundRayNodepathJumping, self.collisionNotifier)
             self.cTrav.addCollider(self.pandaBodySphereNodepath, self.pandaBodyCollisionHandler)
+
+    def maintainAsteroidField(self):
+
+        fieldDepth = max(self.asteroids, lambda x: x.objectNP.getY()) - self.avatar.objectNP.getY()
+
+
+
+        pass
 
     def setKey(self, key, value):
 
@@ -485,9 +542,9 @@ class GameContainer(ShowBase):
 
         if self.GAME_MODE == IN_GAME_MENU:
 
-            #Fog out background
-
             if not self.mode_initialized:
+
+                #Fog out background
 
                 inGameMenuFogColor = (50, 150, 50)
 
@@ -591,6 +648,8 @@ class GameContainer(ShowBase):
             #Find collisions
 
             self.cTrav.traverse(render)
+
+            print self.environ.getBounds()
 
         return Task.cont
  

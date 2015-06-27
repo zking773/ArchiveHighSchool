@@ -17,19 +17,22 @@ if True:
 	
 	terrain.setHeightfield(heightfieldFile)
 	#terrain.setColorMap("colourmap.jpg")
-	# terrain.setBlockSize(512)
+	#terrain.setBlockSize(512)
 	#terrain.setBruteforce(True)
 
 	root = terrain.getRoot()
-	root.setSz(zScale) 
+	
 	terrain.generate()
 
+	root.setSz(zScale) 
+
+	print root.getHeight(30, 30)
 	
 
 	#textures1 = ["default_c.png", "maps/default_d.png", "maps/default_l.png", 
 	#			"textures/bigRockFace.png", "textures/hardDirt.png", "textures/grayRock.png", "textures/shortGrass.png"]
 
-	textures = ["maps/hardDirt.png"]
+	textures = ["hardDirt.png"]
 
 	#for i in range(heightfieldIndex + 1, len(sys.argv)-1):
 	i = 0
