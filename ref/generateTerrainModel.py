@@ -1,5 +1,5 @@
 import sys
-from panda3d.core import *
+from panda3d.core import GeoMipTerrain
 from pandac.PandaModules import TextureStage, Texture
 import direct.directbase.DirectStart
 
@@ -20,20 +20,13 @@ if True:
 	#terrain.setBlockSize(512)
 	#terrain.setBruteforce(True)
 
+	root = terrain.getRoot()
 	
 	terrain.generate()
 
-	root = terrain.getRoot()
 	root.setSz(zScale) 
 
-	print root.getTightBounds()
-
-	teapot = loader.loadModel("models/teapot")
-	teapot.reparentTo(render)
-
-	for i in range(0, 128):
-
-		print terrain.getElevation(128, i+1)
+	print root.getHeight(30, 30)
 	
 
 	#textures1 = ["default_c.png", "maps/default_d.png", "maps/default_l.png", 
