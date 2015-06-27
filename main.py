@@ -304,8 +304,8 @@ class GameContainer(ShowBase):
 
             ########## Terrain #########
 
-            #self.environ = loader.loadModel("../mystuff/test.egg")
-            self.environ = loader.loadModel("models/environment")
+            self.environ = loader.loadModel("../mystuff/test.egg")
+            #self.environ = loader.loadModel("models/environment")
             self.environ.setName("terrain")
             self.environ.reparentTo(render)
             self.environ.setPos(0, 0, 0)
