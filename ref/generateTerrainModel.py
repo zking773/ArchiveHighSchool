@@ -11,7 +11,7 @@ if True:
 	zScale = 60
 
 	#heightfieldFile = sys.argv[heightfieldIndex]
-	heightfieldFile = "first.png"
+	heightfieldFile = "a.png"
 
 	terrain = GeoMipTerrain("hey")
 	
@@ -20,13 +20,17 @@ if True:
 	#terrain.setBlockSize(512)
 	#terrain.setBruteforce(True)
 
-	root = terrain.getRoot()
 	
 	terrain.generate()
 
-	root.setSz(zScale) 
+	root = terrain.getRoot()
+	root.setSz(1) 
 
-	print root.getHeight(30, 30)
+	print root.getBounds()
+
+	for i in range(0, 128):
+
+		print terrain.getElevation(128, i+1)
 	
 
 	#textures1 = ["default_c.png", "maps/default_d.png", "maps/default_l.png", 
