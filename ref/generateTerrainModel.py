@@ -24,7 +24,7 @@ if True:
 	terrain.generate()
 
 	root = terrain.getRoot()
-	root.setSz(1) 
+	root.setSz(5) 
 
 	print root.getBounds()
 

@@ -17,8 +17,6 @@ from panda3d.physics import *
 from direct.gui.DirectGui import *
 from pandac.PandaModules import WindowProperties
 
-########## Gameplay variables #########
-
 #Game modes
 
 MAIN_MENU = 0
@@ -185,7 +183,7 @@ class Avatar(object):
 
 class Asteroid(object):
 
-    FIELD_EXPANSE = (20, 20, 20)
+    FIELD_EXPANSE = (15, 15, 20)
 
     succession_interval = (5, 5, 5)
 
@@ -198,6 +196,38 @@ class Asteroid(object):
     def __del__(self):
 
         self.objectNP.removeNode()
+
+class AsteroidManager(object):
+
+    def __init__(self):
+
+        FIELD_EXPANSE = ((-15, 15), (-15, 15), (0, 20))
+
+        succession_interval = (5, 5, 5)
+
+        axis_control_dic = {"X" : (lambda x: x.objectNP.getX, lambda x: x.objectNP.setX),
+                        "Y" : (lambda x: x.objectNP.getY, lambda x: x.objectNP.setY),
+                        "Z" : (lambda x: x.objectNP.getZ, lambda x: x.objectNP.setZ)}
+
+        axis_index_dic = {"X" : 0, "Y" : 1, "Z" : 2}
+
+        self.asteroids = []
+
+    def genSuccession(self, axis, distance):
+
+        for ast_column in range(self.FIELD_EXPANSE[self.axis_index_dic[axis]][0], self.FIELD_EXPANSE[self.axis_index_dic[axis]][1], self.succession_interval):
+
+            for ast_row in range(self.FIELD_EXPANSE[self.axis_index_dic[axis]][0], self.FIELD_EXPANSE[self.axis_index_dic[axis]][1], self.succession_interval):
+
+                ast_location = [0, 0, 0]
+
+                ast_location[axis_index_dic[axis]] = distance
+                ast_location[(axis_index_dic[axis] + 1) % len(axis_index_dic)] = ast_column
+                ast_location[(axis_index_dic[axis] + 2) % len(axis_index_dic)] = ast_row
+
+                asteroid = Asteroid(ast_location)
+
+                self.asteroids.append(asteroid)
 
 class Camera(object):
 
@@ -391,9 +421,21 @@ class GameContainer(ShowBase):
 
     def maintainAsteroidField(self):
 
-        fieldDepth = max(self.asteroids, lambda x: x.objectNP.getY()) - self.avatar.objectNP.getY()
+        fieldBreadth = (min(self.asteroids, key=lambda x: abs(x.objectNP.getX())), max(self.asteroids, key=lambda x: abs(x.objectNP.getX())))
+        fieldHeight = (min(self.asteroids, key=lambda x: abs(x.objectNP.getY())), max(self.asteroids, key=lambda x: abs(x.objectNP.getY())))
+        fieldDepth = max(self.asteroids, key=lambda x: abs(x.objectNP.getZ()))
 
+        avatarPosition = (self.avatar.objectNP.getX(), self.avatar.objectNP.getY(), 
+                          self.avatar.objectNP.getZ())
 
+        startPoint = min(fieldBreadth, lambda x: abs(x - self.avatar.objectNP.getX()))
+        spawnDirection = -1 if startPoint < 0 else 1
+
+        while abs(startPoint - avatar.objectNP.getX()) < Asteroid.FIELD_EXPANSE[0]:
+
+            startPoint += spawnDirection*Asteroid.succesion_interval[0] 
+
+            genSuccession(axis, startPoint)
 
         pass
 
@@ -575,11 +617,11 @@ class GameContainer(ShowBase):
 
             if self.play_mode == TERRAIN:
 
-                pass
+                self.maintainTurrets()
 
             elif self.play_mode == SPACE:
 
-                pass
+                self.maintainAsteroidField()
 
             #Handle keyboard input
 
