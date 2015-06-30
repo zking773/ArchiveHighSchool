@@ -1,4 +1,4 @@
-from math import pi, sin, cos, radians
+from math import pi, sin, cos, radians, log
 from random import randint
 from sys import exit
  
@@ -30,7 +30,7 @@ SPACE = 1
 
 LEVEL = 1
 
-class ModelContainer(object):
+class GameObject(object):
 
     def __init__(self, objectNP):
 
@@ -49,7 +49,7 @@ class ModelContainer(object):
 
         self.objectNP.removeNode()
 
-class Avatar(object):
+class Avatar(GameObject):
 
     max_velocity = (5, 15)
     acceleration = (.1, .5)
@@ -58,13 +58,11 @@ class Avatar(object):
 
     def __init__(self, objectNP):
 
-        self.objectNP = objectNP
+        GameObject.__init__(self, objectNP)
 
         self.speed = Vec3(0, 0, 0)
 
         self.yawRot = 0
-
-        #Jumping variables
 
         self.landed = False
         self.landGap = 0
@@ -73,13 +71,11 @@ class Avatar(object):
 
     def move(self, dt):
 
-        #Move around
+        #Relative to own coordinate system
 
         self.objectNP.setPos(self.objectNP,
             self.speed[0]*dt, self.speed[1]*dt,
             self.speed[2]*dt)
-
-        #Jump
 
         if self.jumpThrusting:
 
@@ -96,8 +92,6 @@ class Avatar(object):
                 self.jumpThrusting = False
 
     def handleKeys(self, keys, play_mode):
-
-        #Navigate
 
         if play_mode == TERRAIN:
 
@@ -125,9 +119,7 @@ class Avatar(object):
 
         if keys["space"]:
 
-            if self.landed:
-
-                if self.jumpThrustCounter == 10 and not self.jumpThrusting:
+            if self.landed and self.jumpThrustCounter == 10 and not self.jumpThrusting:
 
                     self.landed = False
 
@@ -145,13 +137,9 @@ class Avatar(object):
 
         #Jump legality - player must remain out of ground for time interval before jumping forbidden
 
-        if self.landGap >= Avatar.LAND_GAP_PERMISSION:
+        if self.landGap >= Avatar.LAND_GAP_PERMISSION: self.landed = False
 
-            self.landed = False
-
-        elif self.landGap > 0:
-
-            self.landGap += 1
+        elif self.landGap > 0: self.landGap += 1
 
     def applyFriction(self, friction):
 
@@ -177,21 +165,23 @@ class Avatar(object):
 
             self.landGap = 1
 
-    def __del__(self):
+class Asteroid(GameObject):
 
-        self.objectNP.removeNode()
+    def __init__(self, objectNP, deviationMag, spinMag):
 
-class Asteroid(object):
-
-    FIELD_EXPANSE = (15, 15, 20)
-
-    succession_interval = (5, 5, 5)
-
-    def __init__(self, ref_point):
-
-        self.objectNP = None
+        GameObject.__init__(self, objectNP)
 
         #self.objectNP.set
+
+    def move(self):
+
+        #Relative to universal coordinate system
+
+        pass
+
+    def rotate(self):
+
+        pass
 
     def __del__(self):
 
@@ -201,33 +191,83 @@ class AsteroidManager(object):
 
     def __init__(self):
 
-        FIELD_EXPANSE = ((-15, 15), (-15, 15), (0, 20))
-
-        succession_interval = (5, 5, 5)
+        axis_index_dic = {"X" : 0, "Y" : 1, "Z" : 2}
 
         axis_control_dic = {"X" : (lambda x: x.objectNP.getX, lambda x: x.objectNP.setX),
                         "Y" : (lambda x: x.objectNP.getY, lambda x: x.objectNP.setY),
                         "Z" : (lambda x: x.objectNP.getZ, lambda x: x.objectNP.setZ)}
 
-        axis_index_dic = {"X" : 0, "Y" : 1, "Z" : 2}
-
         self.asteroids = []
+
+    def initialize(self, level):
+
+        breadthBound, heightBound, depthBound = 15, 15, 20
+
+        self.field_expanse = ((-breadthBound, breadthBound), 
+                              (-heightBound, heightBound), 
+                              (0, depthBound))
+
+        difficultyFactor = 1.0 / (log(level))
+
+        self.succession_interval = (5 * difficultyFactor, 5 * difficultyFactor, 
+                                    5 * difficultyFactor)
+
+        distance = 0
+
+        while distance < field_expanse[2][1]:
+
+            genSuccession("Z", self.field_expanse())
+
+            distance += self.succession_interval[2]
 
     def genSuccession(self, axis, distance):
 
-        for ast_column in range(self.FIELD_EXPANSE[self.axis_index_dic[axis]][0], self.FIELD_EXPANSE[self.axis_index_dic[axis]][1], self.succession_interval):
+        col_index = (axis_index_dic[axis] + 1) % len(axis_index_dic)
+        row_index = (axis_index_dic[axis] + 2) % len(axis_index_dic)
 
-            for ast_row in range(self.FIELD_EXPANSE[self.axis_index_dic[axis]][0], self.FIELD_EXPANSE[self.axis_index_dic[axis]][1], self.succession_interval):
+        for ast_column in range(self.field_expanse[col_index][0], self.field_expanse[col_index][1], 
+                                self.succession_interval[col_index]):
+
+            for ast_row in range(self.field_expanse[row_index][0], self.field_expanse[row_index][1], 
+                                self.succession_interval[row_index]):
 
                 ast_location = [0, 0, 0]
 
                 ast_location[axis_index_dic[axis]] = distance
-                ast_location[(axis_index_dic[axis] + 1) % len(axis_index_dic)] = ast_column
-                ast_location[(axis_index_dic[axis] + 2) % len(axis_index_dic)] = ast_row
+                ast_location[col_index] = ast_column
+                ast_location[row_index] = ast_row
 
                 asteroid = Asteroid(ast_location)
 
                 self.asteroids.append(asteroid)
+
+    def maintainAsteroidField(self):
+
+        fieldSize = (min(self.asteroids, key=lambda x: abs(x.objectNP.getX())), max(self.asteroids, key=lambda x: abs(x.objectNP.getX())),
+                     min(self.asteroids, key=lambda x: abs(x.objectNP.getY())), max(self.asteroids, key=lambda x: abs(x.objectNP.getY())),
+                     max(self.asteroids, key=lambda x: abs(x.objectNP.getZ())))
+
+        avatarPosition = (self.avatar.objectNP.getX(), self.avatar.objectNP.getY(), self.avatar.objectNP.getZ())
+
+        for i, axis in enumerate(("X", "Y", "Z")):
+
+            startPoint = min(fieldSize[i], lambda x: abs(x - self.avatar.objectNP.getX()))
+
+            spawnDirection = -1 if startPoint < 0 else 1
+
+            while abs(startPoint - avatar.objectNP.getX()) < Asteroid.field_expanse[0]:
+
+                startPoint += spawnDirection*Asteroid.succesion_interval[0] 
+
+                genSuccession(axis, startPoint)
+
+        for asteroid in self.asteroids:
+
+            asteroid.move()
+
+    def __del__(self):
+
+        self.asteroids = []
 
 class Camera(object):
 
@@ -263,6 +303,8 @@ class GameContainer(ShowBase):
 
         self.GAME_MODE = PLAY
         self.play_mode = TERRAIN
+
+        self.level = 1
 
         self.mode_initialized = False
 
@@ -309,14 +351,17 @@ class GameContainer(ShowBase):
 
     def loadLevel(self, level):
 
+        #Resets
+
         self.avatarActor = Actor("models/panda",
                                 {"walk": "models/panda-walk"})
         self.avatarActor.setScale(.5, .5, .5)
         self.avatarActor.setHpr(180, 0, 0)
-        #self.avatarActor.setPythonTag("moving", False)
         self.avatarActor.setCollideMask(BitMask32.allOff())
 
-        self.asteroids = []
+        self.asteroidManager = AsteroidManager()
+
+        #Alternate modes
 
         if int(level) == level:
 
@@ -326,9 +371,11 @@ class GameContainer(ShowBase):
 
             self.play_mode = SPACE
 
+        #Specifics
+
         if self.play_mode == SPACE:
 
-            pass
+            self.asteroidManager.initialize(self.level)
 
         elif self.play_mode == TERRAIN:
 
@@ -419,23 +466,7 @@ class GameContainer(ShowBase):
             self.cTrav.addCollider(self.pandaGroundRayNodepathJumping, self.collisionNotifier)
             self.cTrav.addCollider(self.pandaBodySphereNodepath, self.pandaBodyCollisionHandler)
 
-    def maintainAsteroidField(self):
-
-        fieldBreadth = (min(self.asteroids, key=lambda x: abs(x.objectNP.getX())), max(self.asteroids, key=lambda x: abs(x.objectNP.getX())))
-        fieldHeight = (min(self.asteroids, key=lambda x: abs(x.objectNP.getY())), max(self.asteroids, key=lambda x: abs(x.objectNP.getY())))
-        fieldDepth = max(self.asteroids, key=lambda x: abs(x.objectNP.getZ()))
-
-        avatarPosition = (self.avatar.objectNP.getX(), self.avatar.objectNP.getY(), 
-                          self.avatar.objectNP.getZ())
-
-        startPoint = min(fieldBreadth, lambda x: abs(x - self.avatar.objectNP.getX()))
-        spawnDirection = -1 if startPoint < 0 else 1
-
-        while abs(startPoint - avatar.objectNP.getX()) < Asteroid.FIELD_EXPANSE[0]:
-
-            startPoint += spawnDirection*Asteroid.succesion_interval[0] 
-
-            genSuccession(axis, startPoint)
+    def maintainTurrets(self):
 
         pass
 
