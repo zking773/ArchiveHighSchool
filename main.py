@@ -53,13 +53,13 @@ class GameObject(object):
 
 class Avatar(GameObject):
 
+    SPACE_SPEED = -5
+
     max_velocity_terrain = (5, 15, 0)
-    max_velocity_space = (5, 0, 5)
+    max_velocity_space = (5, SPACE_SPEED , 5)
 
     acceleration_terrain = (1, 5, 0)
     acceleration_space = (-1, 0, -1)
-
-    SPACE_SPEED = -5
 
     LAND_GAP_PERMISSION = 5
 
@@ -113,7 +113,7 @@ class Avatar(GameObject):
 
         elif play_mode == SPACE:
 
-            self.speed[1] = -10
+            self.speed[1] = Avatar.SPACE_SPEED
 
             if keys["w"]: self.speed[2] += Avatar.acceleration_space[2]
 
@@ -197,7 +197,6 @@ class Asteroid(GameObject):
                              position[2] + deviationMag*random()*choice([-1,1]))
 
         self.transSpeed = Vec3(transMag*random(), transMag*random(), transMag*random())
-        print self.transSpeed
         self.rotSpeed = Vec3(spinMag*random(), spinMag*random(), spinMag*random())
 
     def rotate(self):
@@ -208,6 +207,8 @@ class Asteroid(GameObject):
     def move(self, avatarSpeed, dt):
 
         #Relative to universal coordinate system
+
+        print avatarSpeed[1]
 
         self.objectNP.setPos(self.objectNP.getX() + (self.transSpeed[0] + avatarSpeed[0])*dt, 
                              self.objectNP.getY() + (self.transSpeed[1] + avatarSpeed[1])*dt,
@@ -255,10 +256,10 @@ class AsteroidManager(object):
         col_index = (self.axis_index_dic[axis] + 1) % len(self.axis_index_dic)
         row_index = (self.axis_index_dic[axis] + 2) % len(self.axis_index_dic)
 
-        for ast_column in range(self.field_expanse[col_index][0], self.field_expanse[col_index][1], 
+        for ast_column in range(self.field_expanse[col_index][0], self.field_expanse[col_index][1] + self.succession_interval[col_index], 
                                 self.succession_interval[col_index]):
 
-            for ast_row in range(self.field_expanse[row_index][0], self.field_expanse[row_index][1], 
+            for ast_row in range(self.field_expanse[row_index][0], self.field_expanse[row_index][1] + self.succession_interval[row_index], 
                                 self.succession_interval[row_index]):
 
                 ast_location = [0, 0, 0]
@@ -295,19 +296,19 @@ class AsteroidManager(object):
 
         for i, axis in enumerate(("X", "Y", "Z")):
 
-            if axis != "Y":
+            accessFunc =  self.axis_control_dic[axis][0]
 
-                accessFunc =  self.axis_control_dic[axis][0]
+            bound = self.field_expanse[i][0] if avatarSpeed[i] > 0 else self.field_expanse[i][1]
 
-                bound = self.field_expanse[i][0] if avatarSpeed[i] > 0 else self.field_expanse[i][1]
+            startPoint = min(map(accessFunc, fieldSize[i])) if bound < 0 else max(map(accessFunc, fieldSize[i]))
 
-                startPoint = min(map(accessFunc, fieldSize[i])) if bound < 0 else max(map(accessFunc, fieldSize[i]))
+            spawnDirection = bound/(abs(bound))
 
-                spawnDirection = bound/(abs(bound))
+            while abs(startPoint) < abs(bound):
 
-                while abs(startPoint) < abs(bound):
+                startPoint += spawnDirection*self.succession_interval[i]
 
-                    startPoint += spawnDirection*self.succession_interval[i]
+                if axis == "X" or True:
 
                     self.genSuccession(axis, startPoint)
 
