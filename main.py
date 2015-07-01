@@ -54,10 +54,10 @@ class GameObject(object):
 class Avatar(GameObject):
 
     max_velocity_terrain = (5, 15, 0)
-    max_velocity_space = (.15, 0, .15)
+    max_velocity_space = (5, 0, 5)
 
-    acceleration_terrain = (.1, .5, 0)
-    acceleration_space = (-.01, 0, -.01)
+    acceleration_terrain = (1, 5, 0)
+    acceleration_space = (-1, 0, -1)
 
     SPACE_SPEED = -5
 
@@ -192,10 +192,12 @@ class Asteroid(GameObject):
 
         GameObject.__init__(self, objectNP)
 
-        self.objectNP.setPos(position[0] + deviationMag*random(), position[1] + deviationMag*random(), 
-                             position[2] + deviationMag*random())
+        self.objectNP.setPos(position[0] + deviationMag*random()*choice([-1,1]), 
+                             position[1] + deviationMag*random()*choice([-1,1]), 
+                             position[2] + deviationMag*random()*choice([-1,1]))
 
         self.transSpeed = Vec3(transMag*random(), transMag*random(), transMag*random())
+        print self.transSpeed
         self.rotSpeed = Vec3(spinMag*random(), spinMag*random(), spinMag*random())
 
     def rotate(self):
@@ -203,12 +205,13 @@ class Asteroid(GameObject):
         self.objectNP.setHpr(self.objectNP, self.rotSpeed[0], 
                     self.rotSpeed[0], self.rotSpeed[0])
 
-    def move(self, avatarSpeed):
+    def move(self, avatarSpeed, dt):
 
         #Relative to universal coordinate system
 
-        self.objectNP.setPos(self.objectNP.getX() + self.transSpeed[0] + avatarSpeed[0], self.objectNP.getY() + self.transSpeed[1] + avatarSpeed[1] - .1,
-                    self.objectNP.getZ() + self.transSpeed[2] + avatarSpeed[2])
+        self.objectNP.setPos(self.objectNP.getX() + (self.transSpeed[0] + avatarSpeed[0])*dt, 
+                             self.objectNP.getY() + (self.transSpeed[1] + avatarSpeed[1])*dt,
+                             self.objectNP.getZ() + (self.transSpeed[2] + avatarSpeed[2])*dt)
 
         self.rotate()
 
@@ -226,13 +229,14 @@ class AsteroidManager(object):
 
     def initialize(self, level):
 
-        breadthBound, depthBound, heightBound = 15, 20, 15
+        breadthBound, depthBound, heightBound = 10, 20, 15
 
         self.field_expanse = ((-breadthBound, breadthBound),
                               (0, depthBound), 
                               (-heightBound, heightBound))
 
         difficultyFactor = 1.0 / (log(level))
+        difficultyFactor = 2
 
         self.succession_interval = (int(5 * difficultyFactor), int(5 * difficultyFactor), 
                                     int(5 * difficultyFactor))
@@ -263,7 +267,7 @@ class AsteroidManager(object):
                 ast_location[col_index] = ast_column
                 ast_location[row_index] = ast_row
 
-                asteroid = Asteroid(loader.loadModel(choice(Asteroid.ASTEROID_MODELS)), ast_location, 10, .001, 1)
+                asteroid = Asteroid(loader.loadModel(choice(Asteroid.ASTEROID_MODELS)), ast_location, 5, .001, .1)
 
                 self.asteroids.append(asteroid)
 
@@ -279,7 +283,9 @@ class AsteroidManager(object):
 
         return True
 
-    def maintainAsteroidField(self, avatarPosition, avatarSpeed):
+    def maintainAsteroidField(self, avatarPosition, avatarSpeed, dt):
+
+        #print len(self.asteroids)
 
         self.asteroids = filter(lambda x: self.inView(x), self.asteroids)
 
@@ -289,23 +295,25 @@ class AsteroidManager(object):
 
         for i, axis in enumerate(("X", "Y", "Z")):
 
-            accessFunc =  self.axis_control_dic[axis][0]
+            if axis != "Y":
 
-            bound = self.field_expanse[i][0] if avatarSpeed[i] > 0 else self.field_expanse[i][1]
+                accessFunc =  self.axis_control_dic[axis][0]
 
-            startPoint = min(map(accessFunc, fieldSize[i])) if bound < 0 else max(map(accessFunc, fieldSize[i]))
+                bound = self.field_expanse[i][0] if avatarSpeed[i] > 0 else self.field_expanse[i][1]
 
-            spawnDirection = bound/(abs(bound))
+                startPoint = min(map(accessFunc, fieldSize[i])) if bound < 0 else max(map(accessFunc, fieldSize[i]))
 
-            while abs(startPoint) < abs(bound):
+                spawnDirection = bound/(abs(bound))
 
-                startPoint += spawnDirection*self.succession_interval[i]
+                while abs(startPoint) < abs(bound):
 
-                self.genSuccession(axis, startPoint)
+                    startPoint += spawnDirection*self.succession_interval[i]
+
+                    self.genSuccession(axis, startPoint)
 
         for asteroid in self.asteroids:
 
-            asteroid.move(avatarSpeed)
+            asteroid.move(avatarSpeed, dt)
 
     def __del__(self):
 
@@ -698,7 +706,7 @@ class GameContainer(ShowBase):
 
             elif self.play_mode == SPACE:
 
-                self.asteroidManager.maintainAsteroidField(self.avatar.objectNP.getPos(), self.avatar.speed)
+                self.asteroidManager.maintainAsteroidField(self.avatar.objectNP.getPos(), self.avatar.speed, dt)
 
             #Handle keyboard input
 
