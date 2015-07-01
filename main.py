@@ -7,6 +7,9 @@ from direct.task import Task
 from direct.actor.Actor import Actor
 from direct.interval.IntervalGlobal import Sequence
 
+from pandac.PandaModules import TextureStage, Texture
+from pandac.PandaModules import TexGenAttrib
+
 from panda3d.core import Point3, BitMask32, Vec3
 from panda3d.core import CollisionTraverser, CollisionNode, CollisionHandlerFloor
 from panda3d.core import CollisionHandlerEvent, CollisionSphere, CollisionRay
@@ -359,10 +362,6 @@ class GameContainer(ShowBase):
 
         self.mode_initialized = False
 
-        #Trigger game chain
-
-        self.loadLevel(LEVEL)
-
         ######### Camera #########
 
         self.disableMouse()
@@ -370,6 +369,10 @@ class GameContainer(ShowBase):
         self.mainCamera = Camera(self.camera)
 
         self.mainCamera.camObject.setHpr(0, 0, 0)
+
+        #Trigger game chain
+
+        self.loadLevel(LEVEL)
 
         ######### Events #########
 
@@ -400,6 +403,11 @@ class GameContainer(ShowBase):
 
         self.gui_elements = []
 
+    def loadSpaceTexture(self, level):
+
+        if level < 10: return 'textures/space#.jpg'
+        elif level < 15: pass  
+
     def loadLevel(self, level):
 
         #Resets
@@ -414,13 +422,9 @@ class GameContainer(ShowBase):
 
         #Alternate modes
 
-        if int(self.level) == self.level:
+        if int(self.level) == self.level: self.play_mode = TERRAIN
 
-            self.play_mode = TERRAIN
-
-        else:
-
-            self.play_mode = SPACE
+        else: self.play_mode = SPACE
 
         #Specifics
 
@@ -428,6 +432,25 @@ class GameContainer(ShowBase):
 
             self.avatar = Avatar(self.avatarActor)
             self.avatar.objectNP.reparentTo(render)
+
+            ########## Sky #########
+
+            cubeMap = loader.loadCubeMap(self.loadSpaceTexture(self.level))
+            self.spaceSkyBox = loader.loadModel('models/box')
+
+            self.spaceSkyBox.setScale(100)
+            self.spaceSkyBox.setBin('background', 0)
+            self.spaceSkyBox.setDepthWrite(0)
+            self.spaceSkyBox.setTwoSided(True)
+            self.spaceSkyBox.setTexGen(TextureStage.getDefault(), TexGenAttrib.MWorldCubeMap)
+            self.spaceSkyBox.setTexture(cubeMap, 1)
+            #self.spaceSkyBox.setEffect(CompassEffect.make(render))
+
+            parentNP = render.attachNewNode('parent')
+
+            self.spaceSkyBox.reparentTo(parentNP)
+            self.spaceSkyBox.setPos(-self.spaceSkyBox.getSx()/2, -self.spaceSkyBox.getSy()/2, 
+                                    -self.spaceSkyBox.getSz()/2)
 
             self.asteroidManager.initialize(self.level)
 
@@ -707,7 +730,8 @@ class GameContainer(ShowBase):
 
             elif self.play_mode == SPACE:
 
-                self.asteroidManager.maintainAsteroidField(self.avatar.objectNP.getPos(), self.avatar.speed, dt)
+                self.asteroidManager.maintainAsteroidField(self.avatar.objectNP.getPos(), 
+                                                           self.avatar.speed, dt)
 
             #Handle keyboard input
 
