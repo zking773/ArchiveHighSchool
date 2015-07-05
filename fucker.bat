@@ -1,2 +1,1 @@
 ppython main.py
-cmd

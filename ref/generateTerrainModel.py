@@ -15,7 +15,8 @@ if True:
 
 	terrain = GeoMipTerrain("hey")
 	
-	terrain.setHeightfield(heightfieldFile)
+	terrain.setHeightfield("terrain.png")
+	terrain.setColorMap("terrain_texture.png")  
 	#terrain.setColorMap("colourmap.jpg")
 	#terrain.setBlockSize(512)
 	#terrain.setBruteforce(True)
@@ -24,19 +25,14 @@ if True:
 	terrain.generate()
 
 	root = terrain.getRoot()
-	root.setSz(5) 
-
-	print root.getBounds()
-
-	for i in range(0, 128):
-
-		print terrain.getElevation(128, i+1)
+	root.setSz(60) 
 	
 
 	#textures1 = ["default_c.png", "maps/default_d.png", "maps/default_l.png", 
 	#			"textures/bigRockFace.png", "textures/hardDirt.png", "textures/grayRock.png", "textures/shortGrass.png"]
 
 	textures = ["hardDirt.png"]
+	textures = []
 
 	#for i in range(heightfieldIndex + 1, len(sys.argv)-1):
 	i = 0
