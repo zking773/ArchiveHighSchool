@@ -18,6 +18,9 @@ from panda3d.core import CollisionTraverser, CollisionNode, CollisionHandlerFloo
 from panda3d.core import CollisionHandlerEvent, CollisionSphere, CollisionRay
 from panda3d.core import GeoMipTerrain, loadPrcFileData
 from panda3d.core import Fog
+
+from panda3d.core import ClockObject
+
 from panda3d.physics import *
 
 #Display modes
@@ -34,6 +37,8 @@ DEAD = 2
 
 LEVEL = 1
 
+GRAPHICS_SETTINGS = {"ast_rotation": True}
+
 class GameObject(object):
 
     def __init__(self, objectNP):
@@ -49,7 +54,10 @@ class GameObject(object):
         sphereCenter = tightBounds.getCenter()
         sphereRadius = tightBounds.getRadius()
 
-        return CollisionSphere(sphereCenter, sphereRadius)
+        currentPos = self.objectNP.getPos()
+
+        return CollisionSphere(sphereCenter[0] - currentPos[0], sphereCenter[0] -currentPos[1],
+                               sphereCenter[0] - currentPos[2], sphereRadius)
 
     def __del__(self):
 
@@ -81,15 +89,13 @@ class Avatar(GameObject):
 
         self.SPACE_SPEED = -8
 
-        self.max_velocity_terrain = (5, 15, 0)
-        self.max_velocity_space = (5, self.SPACE_SPEED , 5)
+        self.maxVelocityTerrain = (5, 15, 0)
+        self.maxVelocitySpace = (5, self.SPACE_SPEED , 5)
 
-        self.acceleration_terrain = (1, 5, 0)
-        self.acceleration_space = (-1, 0, -1)
+        self.accelerationTerrain = (1, 5, 0)
+        self.accelerationSpace = (-1, 0, -1)
 
     def move(self, dt):
-
-        #Relative to own coordinate system
 
         self.objectNP.setPos(self.objectNP, self.speed[0]*dt, self.speed[1]*dt, self.speed[2]*dt)
 
@@ -111,23 +117,23 @@ class Avatar(GameObject):
 
         if play_mode == TERRAIN:
 
-            if keys["w"]: self.speed[1] += self.acceleration_terrain[1]
-            if keys["s"]: self.speed[1] += -self.acceleration_terrain[1]
-            if keys["a"]: self.speed[0] += -self.acceleration_terrain[0]
-            if keys["d"]: self.speed[0] += self.acceleration_terrain[0]
+            if keys["w"]: self.speed[1] += self.accelerationTerrain[1]
+            if keys["s"]: self.speed[1] += -self.accelerationTerrain[1]
+            if keys["a"]: self.speed[0] += -self.accelerationTerrain[0]
+            if keys["d"]: self.speed[0] += self.accelerationTerrain[0]
 
-            speedBound = self.max_velocity_terrain
+            speedBound = self.maxVelocityTerrain
 
         elif play_mode == SPACE:
 
-            if keys["w"]: self.speed[2] += self.acceleration_space[2]
-            if keys["s"]: self.speed[2] += -self.acceleration_space[2]
-            if keys["a"]: self.speed[0] += -self.acceleration_space[0]
-            if keys["d"]: self.speed[0] += self.acceleration_space[0]
+            if keys["w"]: self.speed[2] += self.accelerationSpace[2]
+            if keys["s"]: self.speed[2] += -self.accelerationSpace[2]
+            if keys["a"]: self.speed[0] += -self.accelerationSpace[0]
+            if keys["d"]: self.speed[0] += self.accelerationSpace[0]
 
             self.speed[1] = self.SPACE_SPEED
 
-            speedBound = self.max_velocity_space
+            speedBound = self.maxVelocitySpace
 
         for i, bound in enumerate(speedBound):
 
@@ -167,8 +173,6 @@ class Avatar(GameObject):
 
         collisionRecipient = event.getIntoNodePath().getName()
 
-        #Jump legality
-
         if type == "in":
 
             if collisionRecipient.startswith("Ground"):
@@ -177,15 +181,9 @@ class Avatar(GameObject):
 
                 self.landGap = 0
 
-            else:
+            if collisionRecipient == Asteroid.COLLISION_NAME:
 
-                print collisionRecipient
-
-            if collisionRecipient in Asteroid.COLLISION_NAMES or True:
-
-                #print collisionRecipient
-
-                self.alive = False
+                self.states["alive"] = False
 
         elif type == "out" and collisionRecipient.startswith("Ground"):
 
@@ -201,9 +199,9 @@ class ModelReference(object):
 class Asteroid(GameObject):
 
     ASTEROID_MODELS = [ModelReference("models/Asteroid_2", .66),
-                       ModelReference("models/Asteroid_2", .66)]
+                       ModelReference("models/Asteroid_3", .66)]
 
-    COLLISION_NAMES = ["", ""]
+    COLLISION_NAME = "asteroid"
 
     def __init__(self, objectNP, position, deviationMag, transMag, spinMag):
 
@@ -214,7 +212,7 @@ class Asteroid(GameObject):
                              position[2] + deviationMag*random()*choice([-1,1]))
 
         self.transSpeed = Vec3(transMag*random(), transMag*random(), transMag*random())
-        #self.rotSpeed = Vec3(spinMag*random(), spinMag*random(), spinMag*random())
+        self.rotSpeed = Vec3(spinMag*random(), spinMag*random(), spinMag*random())
 
     def orient(self):
 
@@ -222,14 +220,12 @@ class Asteroid(GameObject):
 
     def rotate(self):
 
-        pass
+        if GRAPHICS_SETTINGS["ast_rotation"]:
 
-        #self.objectNP.setHpr(self.objectNP, self.rotSpeed[0], 
-        #            self.rotSpeed[0], self.rotSpeed[0])
+            self.objectNP.setHpr(self.objectNP, self.rotSpeed[0], 
+                    self.rotSpeed[0], self.rotSpeed[0])
 
     def move(self, avatarSpeed, dt):
-
-        #Relative to universal coordinate system
 
         self.objectNP.setPos(self.objectNP.getX() + (self.transSpeed[0] + avatarSpeed[0])*dt, 
                              self.objectNP.getY() + (self.transSpeed[1] + avatarSpeed[1])*dt,
@@ -263,6 +259,8 @@ class AsteroidManager(object):
         self.succession_interval = (int(5 * difficulty_factor), int(5 * difficulty_factor), 
                                     int(5 * difficulty_factor))
 
+        self.deviation_factor = 5
+
         distance = 0
 
         while distance < self.field_expanse[2][1]:
@@ -292,23 +290,22 @@ class AsteroidManager(object):
                 ast_location[row_index] = ast_row
 
                 model_ref = choice(Asteroid.ASTEROID_MODELS)
-
-                asteroid = Asteroid(loader.loadModel(model_ref.modelPath), ast_location, 5, 1, .1)
+                asteroid = Asteroid(loader.loadModel(model_ref.modelPath), ast_location, self.deviation_factor, 1, .1)
 
                 bound = asteroid.objectNP.getBounds()
+                bound_center = bound.getCenter()
+                bound_radius = bound.getRadius()
 
-                asteroidSphere = CollisionSphere(bound.getCenter()[0] - asteroid.objectNP.getX(),
-                                                  bound.getCenter()[1] - asteroid.objectNP.getY(), 
-                                                  bound.getCenter()[2] - asteroid.objectNP.getZ(), 
-                                                   bound.getRadius()*model_ref.radialScale)
+                asteroidSphere = CollisionSphere(bound_center[0] - asteroid.objectNP.getX(), bound_center[1] - asteroid.objectNP.getY(), 
+                                        bound_center[2] - asteroid.objectNP.getZ(), bound_radius*model_ref.radialScale)
 
-                asteroidSphereNode = CollisionNode("asteroidSphere")
+                asteroidSphereNode = CollisionNode(Asteroid.COLLISION_NAME)
                 asteroidSphereNode.addSolid(asteroidSphere)
+
                 asteroidSphereNode.setFromCollideMask(BitMask32.allOff())
                 asteroidSphereNode.setIntoCollideMask(BitMask32.bit(0))
 
                 pandaBodySphereNodepath = asteroid.objectNP.attachNewNode(asteroidSphereNode)
-                #pandaBodySphereNodepath.show()
 
                 asteroid.orient()
 
@@ -316,7 +313,7 @@ class AsteroidManager(object):
 
     def inView(self, asteroid, camDist):
 
-        BUFFER = self.succession_interval[0] + 1
+        BUFFER = self.succession_interval[0] + self.deviation_factor + 1
 
         LENS_OFFSET = 4
 
@@ -334,19 +331,9 @@ class AsteroidManager(object):
 
         for asteroid in self.asteroids: asteroid.move(avatarSpeed, dt)
 
-        #start = clock()
-
         fieldSize = ((min(self.asteroids, key=self.axis_control_dic["X"][0]), max(self.asteroids, key=self.axis_control_dic["X"][0])),
                      (max(self.asteroids, key=self.axis_control_dic["Y"][0]), ),
                      (min(self.asteroids, key=self.axis_control_dic["Z"][0]), max(self.asteroids, key=self.axis_control_dic["Z"][0])))
-
-        #if len(self.debug) < 300:
-
-            #self.debug.append(clock() - start)
-
-        #else:
-
-            #print sum(self.debug)/100
 
         for i, axis in enumerate(("X", "Y", "Z")):
 
@@ -410,7 +397,7 @@ class GameContainer(ShowBase):
 
         self.gameMode = {"display" : PLAY, "play" : TERRAIN}
 
-        self.level = 1.5
+        self.level = 1
 
         self.mode_initialized = False
 
@@ -457,6 +444,9 @@ class GameContainer(ShowBase):
         ######### GUI #########
 
         self.gui_elements = []
+
+        self._GCLK = None
+        self._FT = None
 
     def setKey(self, key, value):
 
@@ -515,13 +505,17 @@ class GameContainer(ShowBase):
 
                 render.clearFog()
 
+                self.togglePhysicsPause()
+
             elif newGameMode == MAIN_MENU:
 
                 pass
 
         elif self.gameMode["display"] == PLAY:
 
-            pass
+            if newGameMode == IN_GAME_MENU:
+
+                self.togglePhysicsPause()
 
         self.gameMode["display"] = newGameMode
 
@@ -652,12 +646,11 @@ class GameContainer(ShowBase):
 
             ########## Collisions #########
 
-            #self.pandaBodySphere = CollisionSphere(self.avatarActor.getBounds().getCenter(), self.avatarActor.getBounds().getRadius())
             bound = self.avatarActor.getBounds()
 
             self.pandaBodySphere = CollisionSphere(bound.getCenter()[0]/self.avatar.objectNP.getSx() - self.avatar.objectNP.getX(),
                                                    bound.getCenter()[1]/self.avatar.objectNP.getSx() - self.avatar.objectNP.getY(),
-                                                   bound.getCenter()[2]/self.avatar.objectNP.getSx() -  self.avatar.objectNP.getZ(), 5)
+                                                   bound.getCenter()[2]/self.avatar.objectNP.getSx() - self.avatar.objectNP.getZ(), 5)
 
             self.pandaBodySphere.setRadius(bound.getRadius() + 1)
 
@@ -740,21 +733,6 @@ class GameContainer(ShowBase):
             self.pandaGroundCollisionHandler = PhysicsCollisionHandler()
             self.pandaGroundCollisionHandler.addCollider(self.pandaGroundSphereNodepath, self.avatar.objectNP)
 
-            ###############
-            self.d = loader.loadModel("models/teapot")
-            self.d.reparentTo(render)
-            self.d.setPos(5, 5, 5)
-
-            self.a = CollisionSphere(0, 0, 1, 1)
-
-            self.b = CollisionNode("teapot")
-            self.b.addSolid(self.a)
-            self.b.setFromCollideMask(BitMask32.bit(0))
-            self.b.setIntoCollideMask(BitMask32.bit(0))
-
-            self.c = self.d.attachNewNode(self.b)
-            #######################
-
             #Notify when player lands
 
             self.pandaGroundRayJumping = CollisionSphere(0, 0, 1, 1)
@@ -775,17 +753,35 @@ class GameContainer(ShowBase):
             self.cTrav.addCollider(self.pandaGroundRayNodepathJumping, self.collisionNotifier)
             self.cTrav.addCollider(self.pandaBodySphereNodepath, self.pandaBodyCollisionHandler)
 
+    def togglePhysicsPause(self):
+
+        if (self._GCLK == None):
+
+            self.disableParticles()
+            self._GCLK = ClockObject.getGlobalClock()
+            self._FT = self._GCLK.getFrameTime()
+            self._GCLK.setMode(ClockObject.MSlave)
+
+        else:
+
+            self._GCLK.setRealTime(self._FT)
+            self._GCLK.setMode(ClockObject.MNormal)
+            self.enableParticles()
+            self._GCLK = None
+
     def gameLoop(self, task):
 
         dt = globalClock.getDt()
 
         self.processKeys()
 
+        alive = self.avatar.states["alive"]
+
         if self.gameMode["display"] == MAIN_MENU:
 
             if not self.mode_initialized:
 
-                MenuBuilder.buildMainMenu()
+                self.buildMainMenu()
 
                 self.mode_initialized = True
 
@@ -822,80 +818,94 @@ class GameContainer(ShowBase):
 
             if self.gameMode["play"] == TERRAIN:
 
-                self.maintainTurrets()
-                self.avatar.move(dt)
+                if alive:
+
+                    self.maintainTurrets()
+                    self.avatar.move(dt)
+
+                else:
+
+                    pass
 
             elif self.gameMode["play"] == SPACE:
 
-                self.asteroidManager.maintainAsteroidField(self.avatar.objectNP.getPos(), 
+                if alive:
+
+                    self.asteroidManager.maintainAsteroidField(self.avatar.objectNP.getPos(), 
                             self.avatar.speed, Camera.AVATAR_DIST, dt)
 
-            #Handle keyboard input
+                else:
 
-            self.avatar.handleKeys(self.keys, self.gameMode["play"])
+                    pass
 
-            ########## Mouse-based viewpoint rotation ##########
+            if alive:
 
-            mouse_pos = self.win.getPointer(0)
+                #Handle keyboard input
 
-            current_mouse_x = mouse_pos.getX()
-            current_mouse_y = mouse_pos.getY()
+                self.avatar.handleKeys(self.keys, self.gameMode["play"])
 
-            #Side to side
+                ########## Mouse-based viewpoint rotation ##########
 
-            if self.gameMode["play"] == TERRAIN:
+                mouse_pos = self.win.getPointer(0)
 
-                mouse_shift_x = current_mouse_x - self.last_mouse_x
-                self.last_mouse_x = current_mouse_x
+                current_mouse_x = mouse_pos.getX()
+                current_mouse_y = mouse_pos.getY()
 
-                if current_mouse_x < 5 or current_mouse_x >= (self.win_center_x * 1.5):
+                #Side to side
 
-                    base.win.movePointer(0, self.win_center_x, current_mouse_y)
-                    self.last_mouse_x = self.win_center_x
+                if self.gameMode["play"] == TERRAIN:
 
-                yaw_shift = -((mouse_shift_x) * Camera.ROT_RATE[0])
+                    mouse_shift_x = current_mouse_x - self.last_mouse_x
+                    self.last_mouse_x = current_mouse_x
 
-                self.avatar.yawRot += yaw_shift
+                    if current_mouse_x < 5 or current_mouse_x >= (self.win_center_x * 1.5):
 
-                self.avatar.objectNP.setH(self.avatar.yawRot)
+                        base.win.movePointer(0, self.win_center_x, current_mouse_y)
+                        self.last_mouse_x = self.win_center_x
 
-            #Up and down
+                    yaw_shift = -((mouse_shift_x) * Camera.ROT_RATE[0])
 
-            mouse_shift_y = current_mouse_y - self.last_mouse_y
-            self.last_mouse_y = current_mouse_y
+                    self.avatar.yawRot += yaw_shift
 
-            if current_mouse_y < 5 or current_mouse_y >= (self.win_center_y * 1.5):
+                    self.avatar.objectNP.setH(self.avatar.yawRot)
 
-                base.win.movePointer(0, current_mouse_x, self.win_center_y)
-                self.last_mouse_y = self.win_center_y
+                #Up and down
 
-            pitch_shift = -((mouse_shift_y) * Camera.ROT_RATE[1])
+                mouse_shift_y = current_mouse_y - self.last_mouse_y
+                self.last_mouse_y = current_mouse_y
 
-            self.mainCamera.pitchRot += pitch_shift
+                if current_mouse_y < 5 or current_mouse_y >= (self.win_center_y * 1.5):
 
-            if self.mainCamera.pitchRot > Camera.FLEX_ROT_BOUND[0]:
+                    base.win.movePointer(0, current_mouse_x, self.win_center_y)
+                    self.last_mouse_y = self.win_center_y
 
-                self.mainCamera.pitchRot = Camera.FLEX_ROT_BOUND[0]
+                pitch_shift = -((mouse_shift_y) * Camera.ROT_RATE[1])
 
-            elif self.mainCamera.pitchRot < -Camera.FLEX_ROT_BOUND[0]:
+                self.mainCamera.pitchRot += pitch_shift
 
-                self.mainCamera.pitchRot = -Camera.FLEX_ROT_BOUND[0]
+                if self.mainCamera.pitchRot > Camera.FLEX_ROT_BOUND[0]:
 
-            xy_plane_cam_dist = Camera.AVATAR_DIST
+                    self.mainCamera.pitchRot = Camera.FLEX_ROT_BOUND[0]
 
-            cam_x_adjust = xy_plane_cam_dist*sin(radians(self.avatar.yawRot))  
-            cam_y_adjust = xy_plane_cam_dist*cos(radians(self.avatar.yawRot))
-            cam_z_adjust = Camera.ELEVATION
+                elif self.mainCamera.pitchRot < -Camera.FLEX_ROT_BOUND[0]:
 
-            self.mainCamera.camObject.setH(self.avatar.yawRot)
-            self.mainCamera.camObject.setP(self.mainCamera.pitchRot)
+                    self.mainCamera.pitchRot = -Camera.FLEX_ROT_BOUND[0]
 
-            self.mainCamera.camObject.setPos(self.avatar.objectNP.getX() + cam_x_adjust, self.avatar.objectNP.getY() - cam_y_adjust, 
-                            self.avatar.objectNP.getZ() + cam_z_adjust)
+                xy_plane_cam_dist = Camera.AVATAR_DIST
 
-            #Find collisions
+                cam_x_adjust = xy_plane_cam_dist*sin(radians(self.avatar.yawRot))  
+                cam_y_adjust = xy_plane_cam_dist*cos(radians(self.avatar.yawRot))
+                cam_z_adjust = Camera.ELEVATION
 
-            self.cTrav.traverse(render)
+                self.mainCamera.camObject.setH(self.avatar.yawRot)
+                self.mainCamera.camObject.setP(self.mainCamera.pitchRot)
+
+                self.mainCamera.camObject.setPos(self.avatar.objectNP.getX() + cam_x_adjust, self.avatar.objectNP.getY() - cam_y_adjust, 
+                                self.avatar.objectNP.getZ() + cam_z_adjust)
+
+                #Find collisions
+
+                self.cTrav.traverse(render)
 
         return Task.cont
  
