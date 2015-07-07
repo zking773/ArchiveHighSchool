@@ -8,6 +8,8 @@ from direct.task import Task
 from direct.actor.Actor import Actor
 from direct.interval.IntervalGlobal import Sequence
 from direct.gui.DirectGui import *
+from direct.particles.Particles import Particles
+from direct.particles.ParticleEffect import ParticleEffect
 
 from pandac.PandaModules import WindowProperties
 from pandac.PandaModules import TextureStage, Texture
@@ -28,16 +30,18 @@ from panda3d.physics import *
 MAIN_MENU = 0
 PLAY = 1
 IN_GAME_MENU = 2
+DEAD = 3
 
 #Play modes
 
 TERRAIN = 0
 SPACE = 1
-DEAD = 2
 
 LEVEL = 1
 
 GRAPHICS_SETTINGS = {"ast_rotation": True}
+
+BALLS = True
 
 class GameObject(object):
 
@@ -61,6 +65,10 @@ class GameObject(object):
 
     def __del__(self):
 
+        for child in self.objectNP.getChildren():
+
+            child.removeNode()
+
         self.objectNP.removeNode()
 
 class Avatar(GameObject):
@@ -70,6 +78,12 @@ class Avatar(GameObject):
     def __init__(self, objectNP, level):
 
         GameObject.__init__(self, objectNP)
+
+        self.reset()
+
+        self.calcLimits(level)
+
+    def reset(self):
 
         self.speed = Vec3(0, 0, 0)
 
@@ -82,8 +96,6 @@ class Avatar(GameObject):
         self.jumpThrustCounter = self.jumpThrustInterval
 
         self.states = {"alive" : True}
-
-        self.calcLimits(level)
 
     def calcLimits(self, level):
 
@@ -245,8 +257,6 @@ class AsteroidManager(object):
 
         self.asteroids = []
 
-        self.debug = []
-
     def initialize(self, level):
 
         breadth_bound, depth_bound, height_bound = 10, 28, 15
@@ -390,14 +400,18 @@ class GameContainer(ShowBase):
 
         wp.setSize(1024, 860)
         wp.setTitle("")
+        wp.setOrigin(-2, -2)
 
         self.win.requestProperties(wp)
+
+        self.win.movePointer(0, wp.getXSize()/2, wp.getYSize()/2)
+        print wp.getXSize()/2, wp.getYSize()/2
 
         ########## Gameplay settings #########
 
         self.gameMode = {"display" : PLAY, "play" : TERRAIN}
 
-        self.level = 1
+        self.level = 1.5
 
         self.mode_initialized = False
 
@@ -408,8 +422,6 @@ class GameContainer(ShowBase):
         self.mainCamera = Camera(self.camera)
 
         self.mainCamera.camObject.setHpr(0, 0, 0)
-
-        #Trigger game chain
 
         self.loadLevel()
 
@@ -437,16 +449,20 @@ class GameContainer(ShowBase):
 
         self.accept("window-event", self.handleWindowEvent)
 
-        self.accept("playerGroundRayJumping-in", self.avatar.handleCollisionEvent, ["in"])
-        self.accept("playerGroundRayJumping-out", self.avatar.handleCollisionEvent, ["out"])
-        self.accept("playerBodyRay-in", self.avatar.handleCollisionEvent, ["in"])
-
         ######### GUI #########
 
-        self.gui_elements = []
+        #self.fonts = {"failure" : loader.loadFont('myfont.ttf')}
+
+        self.guiElements = []
 
         self._GCLK = None
         self._FT = None
+
+        #Trigger game chain
+
+        #self.enableParticles()
+
+        #self.buildMainMenu()
 
     def setKey(self, key, value):
 
@@ -529,19 +545,19 @@ class GameContainer(ShowBase):
 
     def evenButtonPositions(self, button_spacing, button_height, num_buttons):
 
-        center_offset = (button_spacing/(2.0) if (num_buttons % 2 == 0) else 0)
+        centerOffset = (button_spacing/(2.0) if (num_buttons % 2 == 0) else 0)
 
-        button_positions = []
+        buttonPositions = []
 
-        current_pos = center_offset + ((num_buttons - 1)/2) * button_spacing
+        current_pos = centerOffset + ((num_buttons - 1)/2) * button_spacing
 
         for i in range(0, num_buttons):
 
-            button_positions.append(current_pos + (button_height/2.0))
+            buttonPositions.append(current_pos + (button_height/2.0))
 
             current_pos -= button_spacing
 
-        return button_positions
+        return buttonPositions
 
     def buildInGameMenu(self):
 
@@ -562,10 +578,10 @@ class GameContainer(ShowBase):
         options_button.setPos(Vec3(0, 0, button_positions[2]))
         exit_button.setPos(Vec3(0, 0, button_positions[3]))
 
-        self.gui_elements.append(resume_button)
-        self.gui_elements.append(main_menu_button)
-        self.gui_elements.append(options_button)
-        self.gui_elements.append(exit_button)
+        self.guiElements.append(resume_button)
+        self.guiElements.append(main_menu_button)
+        self.guiElements.append(options_button)
+        self.guiElements.append(exit_button)
 
     def buildMainMenu(self):
 
@@ -579,30 +595,71 @@ class GameContainer(ShowBase):
         BUTTON_SPACING = .2
         BUTTON_HEIGHT = start_game_button.getSy()
 
-        button_positions = self.evenButtonPositions(BUTTON_SPACING, BUTTON_HEIGHT)
+        button_positions = self.evenButtonPositions(BUTTON_SPACING, BUTTON_HEIGHT, 4)
 
         start_game_button.setPos(Vec3(0, 0, button_positions[0]))
         select_level_button.setPos(Vec3(0, 0, button_positions[1]))
         game_options_button.setPos(Vec3(0, 0, button_positions[2]))
         exit_button.setPos(Vec3(0, 0, button_positions[3]))
 
-        self.gui_elements.append(start_game_button)
-        self.gui_elements.append(select_level_button)
-        self.gui_elements.append(game_options_button)
-        self.gui_elements.append(exit_button)
+        self.guiElements.append(start_game_button)
+        self.guiElements.append(select_level_button)
+        self.guiElements.append(game_options_button)
+        self.guiElements.append(exit_button)
+
+        particles = Particles()
+        particles.setPoolSize(1000)
+        particles.setBirthRate(.1)
+        particles.setLitterSize(10)
+        particles.setLitterSpread(3)
+        particles.setFactory("PointParticleFactory")
+        particles.setRenderer("PointParticleRenderer")
+        particles.setEmitter("SphereVolumeEmitter")
+        particles.enable()
+
+        self.effect=ParticleEffect("peffect", particles)
+        self.effect.reparentTo(render)
+        #self.effect.setPos(self.avatar.objectNP.getX(), self.avatar.objectNP.getY(), self.avatar.objectNP.getZ() + 5)
+        self.effect.setPos(-1, 0, 0)
+        self.effect.enable()
+
+    def buildDeathScreen(self):
+
+        self.toggleCursor(False)
+
+        backFrame = DirectFrame(frameColor=(1, 0, 0, .7), frameSize=(-.5, .5, -.3, .3),
+                      pos=(0, 0, 0))
+
+        deadMessage = DirectLabel(text = "MISSION FAILURE", scale = .1, pos=(0, 0, .16), relief = None,
+                      text_font = None)
+
+        restartButton = DirectButton(text = "Restart", scale = .1, pos = (0, 0, -.1), command=self.resetLevel)
+
+        deadMessage.reparentTo(backFrame)
+        restartButton.reparentTo(backFrame)
+
+        self.guiElements.append(backFrame)
+        self.guiElements.append(deadMessage)
+        self.guiElements.append(restartButton)
 
     def cleanupGUI(self):
 
-        for gui_element in self.gui_elements:
+        for guiElement in self.guiElements:
 
-            gui_element.destroy()
+            guiElement.destroy()
 
     def loadSpaceTexture(self, level):
 
         if level < 10: return 'textures/space#.jpg'
         elif level < 15: pass  
 
-    def loadLevel(self):
+    def resetLevel(self):
+
+        self.switchDisplayMode(PLAY)
+
+        self.loadLevel(True)
+
+    def loadLevel(self, reset=False):
 
         #Resets
 
@@ -626,8 +683,15 @@ class GameContainer(ShowBase):
 
         if self.gameMode["play"] == SPACE:
 
-            self.avatar = Avatar(self.avatarActor, self.level)
-            self.avatar.objectNP.reparentTo(render)
+            if reset:
+
+                self.avatar.reset()
+
+            else:
+
+                self.avatar = Avatar(self.avatarActor, self.level)
+
+                self.avatar.objectNP.reparentTo(render)
 
             ########## Sky #########
 
@@ -667,6 +731,10 @@ class GameContainer(ShowBase):
             self.collisionNotifier.addOutPattern("%fn-out")
 
             self.cTrav.addCollider(self.pandaBodySphereNodepath, self.collisionNotifier)
+
+            self.accept("playerGroundRayJumping-in", self.avatar.handleCollisionEvent, ["in"])
+            self.accept("playerGroundRayJumping-out", self.avatar.handleCollisionEvent, ["out"])
+            self.accept("playerBodyRay-in", self.avatar.handleCollisionEvent, ["in"])
 
             self.asteroidManager.initialize(self.level)
 
@@ -753,11 +821,16 @@ class GameContainer(ShowBase):
             self.cTrav.addCollider(self.pandaGroundRayNodepathJumping, self.collisionNotifier)
             self.cTrav.addCollider(self.pandaBodySphereNodepath, self.pandaBodyCollisionHandler)
 
+            self.accept("playerGroundRayJumping-in", self.avatar.handleCollisionEvent, ["in"])
+            self.accept("playerGroundRayJumping-out", self.avatar.handleCollisionEvent, ["out"])
+            self.accept("playerBodyRay-in", self.avatar.handleCollisionEvent, ["in"])
+
     def togglePhysicsPause(self):
 
         if (self._GCLK == None):
 
             self.disableParticles()
+
             self._GCLK = ClockObject.getGlobalClock()
             self._FT = self._GCLK.getFrameTime()
             self._GCLK.setMode(ClockObject.MSlave)
@@ -766,7 +839,9 @@ class GameContainer(ShowBase):
 
             self._GCLK.setRealTime(self._FT)
             self._GCLK.setMode(ClockObject.MNormal)
+
             self.enableParticles()
+
             self._GCLK = None
 
     def gameLoop(self, task):
@@ -774,8 +849,6 @@ class GameContainer(ShowBase):
         dt = globalClock.getDt()
 
         self.processKeys()
-
-        alive = self.avatar.states["alive"]
 
         if self.gameMode["display"] == MAIN_MENU:
 
@@ -805,7 +878,17 @@ class GameContainer(ShowBase):
 
                 self.mode_initialized = True
 
+        if self.gameMode["display"] == DEAD:
+
+            if not self.mode_initialized:
+
+                self.buildDeathScreen()
+
+                self.mode_initialized = True
+
         if self.gameMode["display"] == PLAY:
+
+            alive = self.avatar.states["alive"]
 
             if not self.mode_initialized:
 
@@ -823,9 +906,7 @@ class GameContainer(ShowBase):
                     self.maintainTurrets()
                     self.avatar.move(dt)
 
-                else:
-
-                    pass
+                else: self.switchDisplayMode(DEAD)
 
             elif self.gameMode["play"] == SPACE:
 
@@ -834,9 +915,7 @@ class GameContainer(ShowBase):
                     self.asteroidManager.maintainAsteroidField(self.avatar.objectNP.getPos(), 
                             self.avatar.speed, Camera.AVATAR_DIST, dt)
 
-                else:
-
-                    pass
+                else: self.switchDisplayMode(DEAD)
 
             if alive:
 
